@@ -81,7 +81,6 @@ def read_schema() -> list:
     fd.close()
     return sql_file.split(';')
 
-
 def db_init() -> None:
     ''' run to init and seed bookclub.db '''
     commands = read_schema()
@@ -97,7 +96,6 @@ def db_init() -> None:
     db_seed_fields()
     conn.commit()
 
-
 # Incase we need to delete db file before init
 def db_delete_file() -> None:
     if os.path.exists(db_path):
@@ -106,14 +104,12 @@ def db_delete_file() -> None:
         except OSError:
             pass
 
-
 def db_seed_fields() -> None:
     db_insert_many('INSERT INTO books (book_id, title, published) VALUES (?, ?, ?)', books)
     db_insert_many('INSERT INTO members (member_id, member_name, email, phone, joined, deleted) VALUES (?, ?, ?, ?, ?, ?)', members)
     db_insert_many('INSERT INTO authors (author_id, author_name) VALUES (?, ?)', authors)
     db_insert_many('INSERT INTO book_author (book_id, author_id) VALUES (?, ?)', book_author)
     db_insert_many('INSERT INTO loans (loan_id, member_id, book_id, loan_date, due_date, return_date) VALUES (?, ?, ?, ?, ?, ?)', loans)
-
 
 ''' WILL INIT IN MAIN with db_init() '''
 # db_init()
