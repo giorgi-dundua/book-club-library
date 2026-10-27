@@ -1,10 +1,10 @@
 -- SQL CREATE Schema for bookclub.db
 
+DROP TABLE IF EXISTS loans;
+DROP TABLE IF EXISTS book_author;
+DROP TABLE IF EXISTS authors;
 DROP TABLE IF EXISTS books;
 DROP TABLE IF EXISTS members;
-DROP TABLE IF EXISTS authors;
-DROP TABLE IF EXISTS book_author;
-DROP TABLE IF EXISTS loans;
 
 CREATE TABLE books (
     book_id     INTEGER PRIMARY KEY,
