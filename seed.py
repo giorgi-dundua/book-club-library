@@ -144,7 +144,10 @@ def read_schema() -> list:
 
 
 def db_init() -> None:
-    """run to init and seed bookclub.db"""
+    """Recreate the database tables and populate them with sample data.
+
+    WARNING: Deletes existing records. Call only when a reset is intended.
+    """
     commands = read_schema()
     cursor = conn.cursor()
     for command in commands:
@@ -189,12 +192,22 @@ def db_seed_fields() -> None:
 
 
 if __name__ == "__main__":
-    confirmation = input(
-        "This will delete and recreate the database contents. Type RESET to continue: "
-    )
+    # Check for existing user tables before allowing a potentially destructive reset.
+    tables_exist = conn.execute(
+        "SELECT 1 FROM sqlite_master "
+        "WHERE type = 'table' AND name NOT LIKE 'sqlite_%' "
+        "LIMIT 1"
+    ).fetchone()
 
-    if confirmation == "RESET":
-        db_init()
-        print("Database initialized and seeded.")
-    else:
-        print("Initialization cancelled.")
+    if tables_exist:
+        confirmation = input(
+            "Existing database tables will be deleted and recreated. "
+            "Type RESET to continue: "
+        )
+
+        if confirmation != "RESET":
+            print("Initialization cancelled.")
+            raise SystemExit(0)
+
+    db_init()
+    print("Database initialized and seeded.")
