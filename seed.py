@@ -171,13 +171,25 @@ def db_delete_file() -> None:
             pass
 
 
+def format_seed_dates(rows: list) -> list:
+    """Convert datetime values to ISO date strings before insertion."""
+    return [
+        tuple(
+            value.date().isoformat() if isinstance(value, datetime) else value
+            for value in row
+        )
+        for row in rows
+    ]
+
+
 def db_seed_fields() -> None:
     db_insert_many(
-        "INSERT INTO books (book_id, title, published) VALUES (?, ?, ?)", books
+        "INSERT INTO books (book_id, title, published) VALUES (?, ?, ?)",
+        format_seed_dates(books),
     )
     db_insert_many(
         "INSERT INTO members (member_id, member_name, email, phone, joined, deleted) VALUES (?, ?, ?, ?, ?, ?)",
-        members,
+        format_seed_dates(members),
     )
     db_insert_many(
         "INSERT INTO authors (author_id, author_name) VALUES (?, ?)", authors
@@ -187,7 +199,7 @@ def db_seed_fields() -> None:
     )
     db_insert_many(
         "INSERT INTO loans (loan_id, member_id, book_id, loan_date, due_date, return_date) VALUES (?, ?, ?, ?, ?, ?)",
-        loans,
+        format_seed_dates(loans),
     )
 
 
