@@ -38,3 +38,23 @@
 - Coordinate shared interfaces between database and API development.
 - Begin implementing the selected Sprint 1 stories.
 - Complete the team working agreement and documentation.
+
+## 2026-10-28 - Daily Scrum
+
+### Team updates
+
+- Daniel: Completed the SQLite database foundation (#19) and continued Open Library integration (#1). Database validation (#23) remains a follow-up.
+- Gowtami: Working on adding books to the catalogue (#3).
+- Robert: Working on catalogue browsing/search (#4) and member registration (#5).
+- Giorgi: Working on loan and return functionality (#6, #7) and team documentation (#20).
+
+### Blockers and decisions
+
+- No outstanding development blockers reported.
+- Team members could not update issue statuses on the GitHub Project board because they had repository access but not Project access.
+- Giorgi granted Project Admin access to the team, resolving the permissions issue.
+
+### Next steps
+
+- Continue Sprint 1 work and keep the GitHub Project board updated.
+- Review pending pull requests and coordinate shared database and API interfaces.
