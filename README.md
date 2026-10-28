@@ -34,6 +34,25 @@ If uv is not installed, use Python's built-in venv:
     source .venv/bin/activate
     python -m pip install -r requirements.txt
 
+### Initialize the database
+
+Create and populate the SQLite database with sample data:
+
+    python seed.py
+
+On first execution, the script creates `bookclub.db`, initializes the
+database tables, and inserts sample books, authors, members, and loans.
+
+If the database already contains tables, the script asks for confirmation
+before resetting them. Type `RESET` to delete existing records and
+recreate the database with sample data. Any other input cancels the reset.
+
+**Warning:** Resetting the database permanently deletes existing records.
+Do not run a reset when you need to preserve data.
+
+Database initialization is a separate setup step and is not required
+every time the API starts.
+
 ### Run the API
 
     fastapi dev main.py
