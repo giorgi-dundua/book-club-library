@@ -3,6 +3,7 @@ Add a member with info details, such as name, email and phone number
 
 """
 
+import sqlite3
 import datetime
 import re
 from database import db_insert
@@ -43,7 +44,6 @@ def get_member_phone() -> str:
             continue
         return phone
 
-
 def collect_member_info()-> tuple:
     print("--- Please enter your details ---")
     
@@ -52,35 +52,15 @@ def collect_member_info()-> tuple:
     email = get_member_email()
     phone = get_member_phone()
     joined = datetime.date.today().strftime("%Y-%m-%d")
+    member_name = " ".join([first_name, last_name])
 
-    full_name = " ".join([first_name, last_name])
-
-    # Returning data as a list
-    return (full_name, email, phone, joined)
-
-
+    return member_name, email, phone, joined
 
 def add_member() -> None:
-    member_info = collect_member_info()
+    member_name, email, phone, joined = collect_member_info()
+    try:
+        db_insert('INSERT INTO members (member_name, email, phone, joined) VALUES (?, ?, ?, ?)', 
+                  member_name, email, phone, joined)   
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
 
-    for detail in member_info:
-        if detail is None:
-            break
-        # else:
-        #     collect_member_info
-            
-
-    db_insert("?", member_info)
-
-
-
-add_member()
-
-
-# collect_member_info()
-
-    
-# member_data = collect_member_info()
-# print("\n--- Saved Information ---")
-# for detail in member_data:
-#     print(detail)
