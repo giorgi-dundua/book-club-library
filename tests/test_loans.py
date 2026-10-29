@@ -252,3 +252,94 @@ def test_create_loan_database_unique_constraint():
 
     fake_conn.rollback.assert_called_once_with()
     fake_conn.commit.assert_not_called()
+
+
+def test_return_loan_success(client, tmp_path):
+    db_path = tmp_path / "test_bookclub.db"
+
+    # Create a loan that has not been returned.
+    conn = sqlite3.connect(db_path)
+    try:
+        cursor = conn.execute(
+            """
+            INSERT INTO loans
+                (member_id, book_id, loan_date, due_date)
+            VALUES (?, ?, ?, ?)
+            """,
+            (1, 4, "2026-09-01", "2026-10-15"),
+        )
+        loan_id = cursor.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Return the book.
+    response = client.patch(
+        f"/loans/{loan_id}/return",
+        json={
+            "return_date": "2026-11-11",
+        },
+    )
+
+    assert response.status_code == 200
+
+    assert response.json() == {"loan_id": loan_id, "return_date": "2026-11-11"}
+
+    conn = sqlite3.connect(db_path)
+    try:
+        assert conn.execute(
+            "SELECT return_date FROM loans WHERE loan_id = ?", (loan_id,)
+        ).fetchone() == ("2026-11-11",)
+    finally:
+        conn.close()
+
+
+def test_return_loan_twice(client, tmp_path):
+    db_path = tmp_path / "test_bookclub.db"
+
+    # Create a loan that has not been returned.
+    conn = sqlite3.connect(db_path)
+    try:
+        cursor = conn.execute(
+            """
+            INSERT INTO loans
+                (member_id, book_id, loan_date, due_date)
+            VALUES (?, ?, ?, ?)
+            """,
+            (1, 4, "2026-09-01", "2026-10-15"),
+        )
+        loan_id = cursor.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Return the book.
+    response = client.patch(
+        f"/loans/{loan_id}/return",
+        json={
+            "return_date": "2026-11-11",
+        },
+    )
+
+    assert response.status_code == 200
+
+    assert response.json() == {"loan_id": loan_id, "return_date": "2026-11-11"}
+
+    # Return the book again.
+    response = client.patch(
+        f"/loans/{loan_id}/return",
+        json={
+            "return_date": "2026-11-25",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Loan was already returned"}
+
+    conn = sqlite3.connect(db_path)
+    try:
+        assert conn.execute(
+            "SELECT return_date FROM loans WHERE loan_id = ?", (loan_id,)
+        ).fetchone() == ("2026-11-11",)
+    finally:
+        conn.close()
