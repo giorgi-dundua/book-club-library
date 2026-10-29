@@ -1,10 +1,13 @@
 import sqlite3
+from datetime import date
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from main import app, get_db
+from main import LoanCreate, app, create_loan, get_db
 
 
 @pytest.fixture
@@ -207,3 +210,45 @@ def test_create_loan_after_return(client, tmp_path):
 
     assert total_loans == 2
     assert active_loans == 1
+
+
+def test_create_loan_database_unique_constraint():
+    # Simulate successful member and book lookups
+    member_result = Mock()
+    member_result.fetchone.return_value = (1,)
+
+    book_result = Mock()
+    book_result.fetchone.return_value = (1,)
+
+    # Simulate the availability check finding no active loan
+    available_result = Mock()
+    available_result.fetchone.return_value = None
+
+    # Simulate SQLite rejecting a duplicate book loan
+    error = sqlite3.IntegrityError("UNIQUE constraint failed: loans.book_id")
+    error.sqlite_errorname = "SQLITE_CONSTRAINT_UNIQUE"
+
+    # Make successive execute() calls produce these results
+    fake_conn = Mock()
+    fake_conn.execute.side_effect = [
+        member_result,
+        book_result,
+        available_result,
+        error,
+    ]
+
+    loan = LoanCreate(
+        member_id=1,
+        book_id=4,
+        loan_date=date(2026, 10, 28),
+        due_date=date(2026, 11, 11),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        create_loan(loan, fake_conn)
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Book is already borrowed"
+
+    fake_conn.rollback.assert_called_once_with()
+    fake_conn.commit.assert_not_called()

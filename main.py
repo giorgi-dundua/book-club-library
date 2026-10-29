@@ -1,5 +1,5 @@
 from datetime import date
-from sqlite3 import Connection
+from sqlite3 import Connection, IntegrityError
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -53,14 +53,31 @@ def create_loan(loan: LoanCreate, conn: Annotated[Connection, Depends(get_db)]):
     if active_loan is not None:
         raise HTTPException(status_code=409, detail="Book is already borrowed")
 
-    cursor = conn.execute(
-        "INSERT INTO loans (member_id, book_id, loan_date, due_date) VALUES (?, ?, ?, ?)",
-        (
-            loan.member_id,
-            loan.book_id,
-            loan.loan_date.isoformat(),
-            loan.due_date.isoformat(),
-        ),
-    )
-    conn.commit()
+    try:
+        cursor = conn.execute(
+            "INSERT INTO loans (member_id, book_id, loan_date, due_date) "
+            "VALUES (?, ?, ?, ?)",
+            (
+                loan.member_id,
+                loan.book_id,
+                loan.loan_date.isoformat(),
+                loan.due_date.isoformat(),
+            ),
+        )
+        conn.commit()
+
+    except IntegrityError as error:
+        conn.rollback()
+
+        if (
+            error.sqlite_errorname == "SQLITE_CONSTRAINT_UNIQUE"
+            and "loans.book_id" in str(error)
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Book is already borrowed",
+            ) from error
+
+        raise
+
     return {"loan_id": cursor.lastrowid}
