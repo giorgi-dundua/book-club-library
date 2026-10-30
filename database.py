@@ -24,6 +24,7 @@ def db_select(command: str, *args, conn: Connection | None = None) -> list:
         return cursor.fetchall()
     finally:
         cursor.close()
+        if self_connect: conn.close()
 
 
 def db_insert(command: str, *args, conn: Connection | None = None):
@@ -39,8 +40,7 @@ def db_insert(command: str, *args, conn: Connection | None = None):
         raise
     finally:
         cursor.close()
-        if self_connect:
-            conn.close()
+        if self_connect: conn.close()
 
 
 def db_insert_many(command: str, values: list, conn: Connection | None = None):
@@ -56,8 +56,7 @@ def db_insert_many(command: str, values: list, conn: Connection | None = None):
         raise
     finally:
         cursor.close()
-        if self_connect:
-            conn.close()
+        if self_connect: conn.close()
 
 
 def db_update(command: str, *args, conn: Connection | None = None) -> int:
@@ -75,8 +74,7 @@ def db_update(command: str, *args, conn: Connection | None = None) -> int:
         raise
     finally:
         cursor.close()
-        if self_connect: 
-            conn.close()
+        if self_connect: conn.close()
 
 
 def db_delete(command: str, *args, conn: Connection | None = None):
@@ -92,8 +90,7 @@ def db_delete(command: str, *args, conn: Connection | None = None):
         raise
     finally:
         cursor.close()
-        if self_connect:
-            conn.close()
+        if self_connect: conn.close()
 
 
 def sanitize_input(*args) -> tuple:
