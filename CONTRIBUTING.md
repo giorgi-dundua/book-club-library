@@ -50,3 +50,12 @@ A story or task is Done when:
 - Sprint 1 Review and Retrospective: Friday, 30 October.
 - Sprint 2 Retrospective: Thursday, 5 November.
 - Final presentation: Friday, 6 November.
+
+### Sprint roles
+
+| Sprint | Product Owner | Scrum Master |
+|---|---|---|
+| Sprint 1 (26–30 October 2026) | Daniel Nilsson | Giorgi Dundua |
+| Sprint 2 (2–5 November 2026) | Daniel Nilsson | Giorgi Dundua |
+
+The team agreed to keep the same roles for Sprint 2.
