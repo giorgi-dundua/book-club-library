@@ -126,4 +126,4 @@ def db_seed_fields() -> None:
     db_insert_many('INSERT INTO loans (loan_id, member_id, book_id, loan_date, due_date, return_date) VALUES (?, ?, ?, ?, ?, ?)', loans)
 
 ''' WILL INIT IN MAIN with db_init() '''
-db_init()
+# db_init()
