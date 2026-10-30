@@ -343,3 +343,87 @@ def test_return_loan_twice(client, tmp_path):
         ).fetchone() == ("2026-11-11",)
     finally:
         conn.close()
+
+
+def test_return_loan_not_found(client):
+    response = client.patch(
+        "/loans/99999/return",
+        json={"return_date": "2026-11-11"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Loan not found"}
+
+
+def test_borrow_after_return(client, tmp_path):
+    db_path = tmp_path / "test_bookclub.db"
+
+    # Create a loan that has not been returned.
+    conn = sqlite3.connect(db_path)
+    try:
+        cursor = conn.execute(
+            """
+            INSERT INTO loans
+                (member_id, book_id, loan_date, due_date)
+            VALUES (?, ?, ?, ?)
+            """,
+            (1, 4, "2026-09-01", "2026-10-15"),
+        )
+        loan_id = cursor.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Return the book.
+    response = client.patch(
+        f"/loans/{loan_id}/return",
+        json={
+            "return_date": "2026-11-11",
+        },
+    )
+
+    assert response.status_code == 200
+
+    assert response.json() == {"loan_id": loan_id, "return_date": "2026-11-11"}
+
+    conn = sqlite3.connect(db_path)
+    try:
+        assert conn.execute(
+            "SELECT return_date FROM loans WHERE loan_id = ?", (loan_id,)
+        ).fetchone() == ("2026-11-11",)
+    finally:
+        conn.close()
+
+    # Borrow the same book again.
+    response = client.post(
+        "/loans",
+        json={
+            "member_id": 1,
+            "book_id": 4,
+            "loan_date": "2026-11-12",
+            "due_date": "2026-11-26",
+        },
+    )
+
+    assert response.status_code == 201
+
+    # Verify that both the historical and new loans exist.
+    conn = sqlite3.connect(db_path)
+    try:
+        total_loans = conn.execute(
+            "SELECT COUNT(*) FROM loans WHERE book_id = ?",
+            (4,),
+        ).fetchone()[0]
+
+        active_loans = conn.execute(
+            """
+            SELECT COUNT(*) FROM loans
+            WHERE book_id = ? AND return_date IS NULL
+            """,
+            (4,),
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+    assert total_loans == 2
+    assert active_loans == 1
