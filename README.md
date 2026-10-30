@@ -60,4 +60,4 @@ endpoints, API-key authentication, and the Python client are under development.
 
 ## ER Diagram
 
-![ER Diagram book-club-library](./docs/er_library_v1.png)
+![ER Diagram book-club-library](./docs/er_diagram_v2.png)
