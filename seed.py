@@ -3,7 +3,7 @@ Init and Seed bookclub.db with Test Data
 '''
 import os.path
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from database import db_connect, db_insert_many
 
@@ -83,6 +83,9 @@ def read_schema() -> list:
 
 def db_init() -> None:
     ''' run to init and seed bookclub.db '''
+    sqlite3.register_adapter(date, adapt_date_iso)
+    sqlite3.register_adapter(datetime, adapt_datetime_iso)
+
     commands = read_schema()
     cursor = conn.cursor()
     for command in commands:
@@ -95,6 +98,17 @@ def db_init() -> None:
     cursor.close()
     db_seed_fields()
     conn.commit()
+
+
+def adapt_date_iso(val):
+    '''Adapt datetime.date to ISO 8601 date.'''
+    return val.isoformat()
+
+
+def adapt_datetime_iso(val):
+    '''Adapt datetime.datetime to timezone-naive ISO 8601 date.'''
+    return val.isoformat()
+
 
 # Incase we need to delete db file before init
 def db_delete_file() -> None:
@@ -112,4 +126,4 @@ def db_seed_fields() -> None:
     db_insert_many('INSERT INTO loans (loan_id, member_id, book_id, loan_date, due_date, return_date) VALUES (?, ?, ?, ?, ?, ?)', loans)
 
 ''' WILL INIT IN MAIN with db_init() '''
-# db_init()
+db_init()

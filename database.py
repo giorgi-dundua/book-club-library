@@ -14,8 +14,7 @@ def db_connect() -> Connection:
     return conn
 
 
-def db_select(command: str, *args) -> list:
-    conn = db_connect()
+def db_select(command: str, *args, conn: Connection = db_connect()) -> list:
     try:
         cursor = conn.cursor()
         cursor.execute(command, sanitize_input(*args))
@@ -26,8 +25,7 @@ def db_select(command: str, *args) -> list:
         cursor.close()
 
 
-def db_insert(command: str, *args):
-    conn = db_connect()
+def db_insert(command: str, *args, conn: Connection = db_connect()):
     try:
         cursor = conn.cursor()
         cursor.execute(command, sanitize_input(*args))
@@ -39,8 +37,7 @@ def db_insert(command: str, *args):
         cursor.close()
 
 
-def db_insert_many(command: str, values: list): 
-    conn = db_connect()
+def db_insert_many(command: str, values: list, conn: Connection = db_connect()):
     try:
         cursor = conn.cursor()
         cursor.executemany(command, values)
@@ -52,8 +49,7 @@ def db_insert_many(command: str, values: list):
         cursor.close()
 
 
-def db_update(command: str, *args) -> int:
-    conn = db_connect()
+def db_update(command: str, *args, conn: Connection = db_connect()) -> int:
     try:
         cursor = conn.cursor()
         cursor.execute(command, sanitize_input(*args))
@@ -67,8 +63,7 @@ def db_update(command: str, *args) -> int:
         cursor.close()
 
 
-def db_delete(command: str, *args):
-    conn = db_connect()
+def db_delete(command: str, *args, conn: Connection = db_connect()):
     try:
         cursor = conn.cursor()
         cursor.execute(command, sanitize_input(*args))
