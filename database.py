@@ -14,18 +14,22 @@ def db_connect() -> Connection:
     return conn
 
 
-def db_select(command: str, *args, conn: Connection = db_connect()) -> list:
+def db_select(command: str, *args, conn: Connection | None = None) -> list:
+    self_connect = conn is None
+    if self_connect: conn = db_connect()
+
     try:
         cursor = conn.cursor()
         cursor.execute(command, sanitize_input(*args))
         return cursor.fetchall()
-    except Error:
-        raise
     finally:
         cursor.close()
 
 
-def db_insert(command: str, *args, conn: Connection = db_connect()):
+def db_insert(command: str, *args, conn: Connection | None = None):
+    self_connect = conn is None
+    if self_connect: conn = db_connect()
+
     try:
         cursor = conn.cursor()
         cursor.execute(command, sanitize_input(*args))
@@ -35,9 +39,14 @@ def db_insert(command: str, *args, conn: Connection = db_connect()):
         raise
     finally:
         cursor.close()
+        if self_connect:
+            conn.close()
 
 
-def db_insert_many(command: str, values: list, conn: Connection = db_connect()):
+def db_insert_many(command: str, values: list, conn: Connection | None = None):
+    self_connect = conn is None
+    if self_connect: conn = db_connect()
+
     try:
         cursor = conn.cursor()
         cursor.executemany(command, values)
@@ -47,9 +56,14 @@ def db_insert_many(command: str, values: list, conn: Connection = db_connect()):
         raise
     finally:
         cursor.close()
+        if self_connect:
+            conn.close()
 
 
-def db_update(command: str, *args, conn: Connection = db_connect()) -> int:
+def db_update(command: str, *args, conn: Connection | None = None) -> int:
+    self_connect = conn is None
+    if self_connect: conn = db_connect()
+
     try:
         cursor = conn.cursor()
         cursor.execute(command, sanitize_input(*args))
@@ -61,9 +75,14 @@ def db_update(command: str, *args, conn: Connection = db_connect()) -> int:
         raise
     finally:
         cursor.close()
+        if self_connect: 
+            conn.close()
 
 
-def db_delete(command: str, *args, conn: Connection = db_connect()):
+def db_delete(command: str, *args, conn: Connection | None = None):
+    self_connect = conn is None
+    if self_connect: conn = db_connect()
+
     try:
         cursor = conn.cursor()
         cursor.execute(command, sanitize_input(*args))
@@ -73,6 +92,8 @@ def db_delete(command: str, *args, conn: Connection = db_connect()):
         raise
     finally:
         cursor.close()
+        if self_connect:
+            conn.close()
 
 
 def sanitize_input(*args) -> tuple:
@@ -88,7 +109,7 @@ def validate_loan(book_id: int) -> bool:
 def validate_return(member_id: int, book_id: int) -> bool:
     ''' validates that the member has an active loan of the book '''
     command = 'SELECT * FROM loans WHERE member_id == ? AND book_id == ? AND return_date IS NULL'
-    return not not db_select(command, member_id, book_id) #cheeky not not
+    return bool(db_select(command, member_id, book_id))
 
 
 def validate_add_book(title: str, author_name: str) -> bool:
