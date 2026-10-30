@@ -30,11 +30,3 @@ def show_all_books(list_books: list) -> None:
         print("Authors:", authors)
         print("Publiched:", published)
         print("-" * 40)
-
-
-
-
-list_books = get_books_data()
-show_all_books(list_books)
-
-
