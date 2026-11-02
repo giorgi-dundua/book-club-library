@@ -3,6 +3,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException
 
+from auth import require_api_key
 from database import db_connect
 from models import LoanCreate, LoanReturn, MemberUpdate
 
@@ -22,7 +23,7 @@ def get_db():
         conn.close()
 
 
-@app.post("/loans", status_code=201)
+@app.post("/loans", dependencies=[Depends(require_api_key)], status_code=201)
 def create_loan(loan: LoanCreate, conn: Annotated[Connection, Depends(get_db)]):
     member = conn.execute(
         "SELECT 1 FROM members WHERE member_id = ?",
@@ -74,7 +75,7 @@ def create_loan(loan: LoanCreate, conn: Annotated[Connection, Depends(get_db)]):
     return {"loan_id": cursor.lastrowid}
 
 
-@app.patch("/loans/{loan_id}/return")
+@app.patch("/loans/{loan_id}/return", dependencies=[Depends(require_api_key)])
 def return_loan(
     loan_id: int, loan: LoanReturn, conn: Annotated[Connection, Depends(get_db)]
 ):
