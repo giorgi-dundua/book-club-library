@@ -122,7 +122,7 @@ def update_member(
     try:
         conn.execute(
             'UPDATE members SET member_name = ?, email = ?, phone = ? '
-            'WHERE member_id = ? RETURNING *',
+            'WHERE member_id = ?',
             (*values, member_id)
         )
         updated_member = conn.execute(
