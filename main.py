@@ -99,7 +99,7 @@ def return_loan(
     }
 
 
-@app.patch('members/{member_id}')
+@app.patch('/members/{member_id}')
 def update_member_info(
     member_id: int, changes: MemberUpdate, conn: Annotated[Connection, Depends(get_db)]
 ):
@@ -111,17 +111,17 @@ def update_member_info(
     if member is None:
         raise HTTPException(status_code=404, detail='Member not found')
     
-    values = (
-        val if val else member[i] for i,val in enumerate(changes)
-    )
+    values = [
+        val if val is not None else member[i] for i,(_,val) in enumerate(changes)
+    ]
 
     try:
         cursor = conn.execute(
-            'UPDATE members SET member_name = ? email = ? phone = ? '
+            'UPDATE members SET member_name = ?, email = ?, phone = ? '
             'WHERE member_id = ?',
-            values
+            (*values, member_id)
         )
-        if cursor.lastrowid == 0: pass
+        total_changed = cursor.total_changed
 
         updated_member = conn.execute(
             'SELECT * from members WHERE member_id = ?',
@@ -130,15 +130,14 @@ def update_member_info(
 
         conn.commit()
 
-    except IntegrityError as error:
+    except IntegrityError:
         conn.rollback()
         raise
 
-    return {
-        'member_id': member_id,
-        'member_name': updated_member.get('member_name'),
-        'email': updated_member.get('email'),
-        'phone': updated_member.get('phone'),
-        'joined': updated_member.get('joined').isoformat(),
-        'deleted': updated_member.get('deleted')
-    }
+    if total_changed == 0:
+        return {'No changes'}
+
+    return dict(zip(
+        ('member_id', 'member_name', 'email', 'phone', 'joined', 'deleted'),
+        updated_member
+    ))

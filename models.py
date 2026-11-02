@@ -15,6 +15,6 @@ class LoanReturn(BaseModel):
 
 
 class MemberUpdate(BaseModel):
-    member_name: int | None = None
+    member_name: str | None = None
     email: str | None = None
     phone: str | None = None
