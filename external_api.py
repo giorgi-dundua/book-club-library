@@ -75,7 +75,7 @@ def parse_book_data(data) -> tuple | None:
         title = data.get('title')
         author_name = data.get('author_name')
         published = date(data.get('first_publish_year'),1,1).isoformat()
-    except AttributeError, TypeError:
+    except (AttributeError, TypeError):
         print('Some data fields are missing or null')
         raise
     return (title, author_name, published)
