@@ -100,8 +100,8 @@ def return_loan(
     }
 
 
-@app.patch('/members/{member_id}')
-def update_member_info(
+@app.patch('/members/{member_id}', dependencies=[Depends(require_api_key)])
+def update_member(
     member_id: int, changes: MemberUpdate, conn: Annotated[Connection, Depends(get_db)]
 ):
     member = conn.execute(
