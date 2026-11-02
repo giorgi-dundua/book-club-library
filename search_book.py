@@ -22,7 +22,7 @@ def get_book(title: str) -> list:
 
     return result
 
-def show_book(book):
+def show_book(book: str) -> None:
     for title, return_date in book:
         if return_date is None:
             status = "Not available"
@@ -32,7 +32,7 @@ def show_book(book):
     print("Book found:")
     print(f"{title} - {status}")
 
-def search_book():
+def search_book() -> None:
     title = capwords(input("Search book by title: ").strip())
     found_book = get_book(title)
     if not found_book:
