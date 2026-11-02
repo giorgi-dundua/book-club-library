@@ -12,3 +12,9 @@ class LoanCreate(BaseModel):
 
 class LoanReturn(BaseModel):
     return_date: date
+
+
+class MemberUpdate(BaseModel):
+    member_name: int | None = None
+    email: str | None = None
+    phone: str | None = None
