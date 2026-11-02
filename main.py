@@ -4,11 +4,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException
 
 from database import db_connect
-from models import LoanCreate
-
-class LoanReturn(BaseModel):
-    return_date: date
-
+from models import LoanCreate, LoanReturn
 
 app = FastAPI(title="Book Club Library API")
 
