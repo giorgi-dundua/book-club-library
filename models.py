@@ -8,3 +8,7 @@ class LoanCreate(BaseModel):
     book_id: int
     loan_date: date
     due_date: date
+
+
+class LoanReturn(BaseModel):
+    return_date: date

@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException
 
 from database import db_connect
-from models import LoanCreate
+from models import LoanCreate, LoanReturn
 
 app = FastAPI(title="Book Club Library API")
 
@@ -72,3 +72,28 @@ def create_loan(loan: LoanCreate, conn: Annotated[Connection, Depends(get_db)]):
         raise
 
     return {"loan_id": cursor.lastrowid}
+
+
+@app.patch("/loans/{loan_id}/return")
+def return_loan(
+    loan_id: int, loan: LoanReturn, conn: Annotated[Connection, Depends(get_db)]
+):
+    cursor = conn.execute(
+        "UPDATE loans SET return_date = ? WHERE loan_id = ? AND return_date IS NULL",
+        (loan.return_date.isoformat(), loan_id),
+    )
+
+    if cursor.rowcount == 0:
+        existing_loan = conn.execute(
+            "SELECT 1 FROM loans WHERE loan_id = ?", (loan_id,)
+        ).fetchone()
+        if existing_loan is None:
+            raise HTTPException(status_code=404, detail="Loan not found")
+        raise HTTPException(status_code=409, detail="Loan was already returned")
+
+    conn.commit()
+
+    return {
+        "loan_id": loan_id,
+        "return_date": loan.return_date.isoformat(),
+    }
