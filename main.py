@@ -1,19 +1,10 @@
-from datetime import date
 from sqlite3 import Connection, IntegrityError
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException
-from pydantic import BaseModel
 
 from database import db_connect
-
-
-class LoanCreate(BaseModel):
-    member_id: int
-    book_id: int
-    loan_date: date
-    due_date: date
-
+from models import LoanCreate
 
 app = FastAPI(title="Book Club Library API")
 
