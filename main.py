@@ -115,14 +115,15 @@ def update_member_info(
         val if val is not None else member[i] for i,(_,val) in enumerate(changes)
     ]
 
+    if tuple(values) == member:
+        return {'message': 'No changes'}
+
     try:
-        cursor = conn.execute(
+        conn.execute(
             'UPDATE members SET member_name = ?, email = ?, phone = ? '
-            'WHERE member_id = ?',
+            'WHERE member_id = ? RETURNING *',
             (*values, member_id)
         )
-        total_changed = cursor.total_changed
-
         updated_member = conn.execute(
             'SELECT * from members WHERE member_id = ?',
             (member_id,)
@@ -133,9 +134,6 @@ def update_member_info(
     except IntegrityError:
         conn.rollback()
         raise
-
-    if total_changed == 0:
-        return {'No changes'}
 
     return dict(zip(
         ('member_id', 'member_name', 'email', 'phone', 'joined', 'deleted'),
