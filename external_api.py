@@ -2,14 +2,16 @@
 Fetches book information from Open Library
 Docs: https://openlibrary.org/docs#/
 '''
-import requests
-from datetime import datetime
+from datetime import date
+from sqlite3 import IntegrityError
 
-from database import db_insert
+import requests
+from database import db_connect
 
 ''' Open Library API is slow so have to use a substantial timeout '''
 OPEN_LIBRARY_BASE='https://openlibrary.org'
 timeout_in_seconds = 5
+
 
 def get_req_json(endpoint,params=None,headers=None,timeout=timeout_in_seconds) -> dict:
     try:
@@ -28,50 +30,94 @@ def get_req_json(endpoint,params=None,headers=None,timeout=timeout_in_seconds) -
         print(f'Something else went wrong: {type(error).__name__}')
     return None
 
-def fetch_isbn(isbn: str) -> dict:
-    endpoint = OPEN_LIBRARY_BASE+'/search.json?isbn={0}'.format(isbn.strip())
+
+def fetch_isbn(isbn: str) -> dict | None:
+    endpoint = OPEN_LIBRARY_BASE+'/search.json?isbn='+isbn.strip()
     data = get_req_json(endpoint)
     return data
 
-def fetch_title(title: str) -> dict:
-    endpoint = OPEN_LIBRARY_BASE+'/search.json?title={0}'.format(title.strip().lower().title())
+
+def fetch_title(title: str) -> dict | None:
+    endpoint = OPEN_LIBRARY_BASE+'/search.json?title='+title.strip().lower().title()
     data = get_req_json(endpoint)
     return data
 
-def fetch_author(author: str) -> dict:
-    endpoint = OPEN_LIBRARY_BASE+'/search.json?author={0}'.format(author.strip().lower().title())
+
+def fetch_author(author: str) -> dict | None:
+    endpoint = OPEN_LIBRARY_BASE+'/search.json?author='+author.strip().lower().title()
     data = get_req_json(endpoint)
     return data
 
-def fetch_general(search: str) -> dict:
-    endpoint = OPEN_LIBRARY_BASE+'/search.json?q={0}'.format(search.strip())
+
+def fetch_general(search: str) -> dict | None:
+    endpoint = OPEN_LIBRARY_BASE+'/search.json?q='+search.strip()
     data = get_req_json(endpoint)
     return data
 
-def search_info(keyword, filter) -> dict:
+
+def search_info(keyword, filter='_') -> dict | None:
     ''' search by different filter, Open Library weighs relavancy so first element is usually correct '''
     match filter:
-        case 'isbn':    return fetch_isbn(keyword).get('docs').pop(0)
-        case 'title':   return fetch_title(keyword).get('docs').pop(0)
-        case 'author':  return fetch_author(keyword).get('docs').pop(0)
-        case _:         return fetch_general(keyword).get('docs').pop(0)
+        case 'isbn':    data = fetch_isbn(keyword)
+        case 'title':   data = fetch_title(keyword)
+        case 'author':  data = fetch_author(keyword)
+        case _:         data = fetch_general(keyword)
+    if data is not None and data:
+        docs = data.get('docs')
+        if docs is not None and docs: 
+            return docs.pop(0)
+    return None
 
-def parse_book_data(data) -> tuple:
+
+def parse_book_data(data) -> tuple | None:
+    if data is None: return None
     try:
         title = data.get('title')
-        author_name = data.get('author_name')[0]
-        published = datetime(data.get('first_publish_year'),1,1)
-    except TypeError:
+        author_name = data.get('author_name')
+        published = date(data.get('first_publish_year'),1,1).isoformat()
+    except AttributeError, TypeError:
         print('Some data fields are missing or null')
+        raise
     return (title, author_name, published)
 
+
 ''' imports and running db_add_book dependant on sqlite database implementation '''
-def db_add_book(data) -> None:
-    title, author_name, published = parse_book_data(data)
-    db_insert('INSERT INTO books (title, published) VALUES (?, ?)', title, published)
-    db_insert('INSERT INTO authors (author_name) VALUES (?)', author)
-    ''' Not sure on a more elegant way to link in composite table ''' 
-    db_insert(  'INSERT INTO book_author (book_id, author_id) VALUES ('
-                '(SELECT book_id FROM books WHERE title == ?),'
-                '(SELECT author_id FROM authors WHERE author_name == ?))',
-                title, author_name)
+def db_add_book(data) -> int:
+    try:
+        title, authors, published = parse_book_data(data)
+    except TypeError:
+        print('Data is missing')
+        raise
+
+    conn = db_connect()
+    try:
+        cursor = conn.execute(
+            'INSERT INTO books (title, published) VALUES (?, ?)',
+            (title, published)
+        )
+        book_id = cursor.lastrowid
+
+        for author in authors:
+            exists = conn.execute(
+                'SELECT author_id FROM authors WHERE author_name = ?',
+                (author,),
+            ).fetchone()
+            if exists:
+                author_id = exists[0]
+            else:
+                author_id = conn.execute(
+                    'INSERT INTO authors (author_name) VALUES (?)',
+                    (author,),
+                ).lastrowid
+            conn.execute(
+                'INSERT OR IGNORE INTO book_author (book_id, author_id) '
+                'VALUES (?, ?)',
+                (book_id, author_id),
+            )
+        conn.commit()
+        return book_id
+    except IntegrityError:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
