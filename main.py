@@ -98,3 +98,58 @@ def return_loan(
         "loan_id": loan_id,
         "return_date": loan.return_date.isoformat(),
     }
+
+
+@app.get('/members', dependencies=[Depends(require_api_key)])
+def get_members(
+    conn: Annotated[Connection, Depends(get_db)]
+):
+    try:
+        members = conn.execute(
+            'SELECT * FROM members WHERE deleted = 0',
+        ).fetchall()
+
+        # No members found
+        if members is None:
+            raise HTTPException(status_code=404, detail='No members found')
+
+        conn.commit()
+
+    except IntegrityError:
+        conn.rollback()
+        raise
+    
+    # Build list containing member data dicts
+    members_list = [dict(zip(
+        ('member_id', 'member_name', 'email', 'phone', 'joined', 'deleted'),
+        member))
+        for member in members]
+
+    return {'members': members_list}
+
+
+@app.get('/members/{member_id}', dependencies=[Depends(require_api_key)])
+def get_member(
+    member_id: int, conn: Annotated[Connection, Depends(get_db)]
+):
+    try:
+        member = conn.execute(
+            'SELECT * FROM members WHERE '
+            'member_id = ? AND deleted = 0',
+            (member_id,)
+        ).fetchone()
+
+        # Member does not exist or deleted: 1
+        if member is None:
+            raise HTTPException(status_code=404, detail='Member not found')
+
+        conn.commit()
+
+    except IntegrityError:
+        conn.rollback()
+        raise
+
+    return dict(zip(
+        ('member_id', 'member_name', 'email', 'phone', 'joined', 'deleted'),
+        member
+    ))
