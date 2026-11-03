@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException
 
 from auth import require_api_key
-from database import db_connect
+from database import db_connect, get_book_loan_statistics
 from models import LoanCreate, LoanReturn
 
 app = FastAPI(title="Book Club Library API")
@@ -98,3 +98,10 @@ def return_loan(
         "loan_id": loan_id,
         "return_date": loan.return_date.isoformat(),
     }
+
+
+@app.get("/statistics/most-borrowed")
+def read_book_loan_statistics(conn: Annotated[Connection, Depends(get_db)]):
+    book_rows = get_book_loan_statistics(conn)
+    keys = ["book_id", "title", "total_loans"]
+    return [dict(zip(keys, row)) for row in book_rows]
