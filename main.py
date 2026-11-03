@@ -105,18 +105,20 @@ def update_member(
     member_id: int, changes: MemberUpdate, conn: Annotated[Connection, Depends(get_db)]
 ):
     member = conn.execute(
-        'SELECT member_name, email, phone from members WHERE member_id = ?',
+        'SELECT member_name, email, phone, deleted from members WHERE member_id = ?',
         (member_id,)
     ).fetchone()
 
-    if member is None:
+    # Member does not exist or is deleted: 1
+    if member is None or member[-1] == 1:
         raise HTTPException(status_code=404, detail='Member not found')
     
     values = [
         val if val is not None else member[i] for i,(_,val) in enumerate(changes)
     ]
 
-    if tuple(values) == member:
+    # Omit deleted from compare
+    if tuple(values) == member[:-1]:
         return {'message': 'No changes'}
 
     try:
