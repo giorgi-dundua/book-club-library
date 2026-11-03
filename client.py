@@ -1,6 +1,8 @@
 import requests
 import streamlit as st
 
+from api_client import LibraryApiClient
+
 st.set_page_config(page_title="Book Club Library", layout="wide")
 
 st.title("Book Club Library")
@@ -32,31 +34,29 @@ with tab_loans:
 with tab_stats:
     st.metric("Books in sample catalogue", len(books))
 
+api = LibraryApiClient("http://127.0.0.1:8000")
 
-try:
-    response = requests.get("http://127.0.0.1:8000/health", timeout=5)
-    response.raise_for_status()
-    with tab_health:
-        if response.json() == {"status": "ok"}:
+with tab_health:
+    try:
+        result = api.check_health()
+
+        if result == {"status": "ok"}:
             st.success("API connected")
         else:
             st.error("Unexpected API response")
-except requests.exceptions.Timeout:
-    with tab_health:
+
+    except requests.exceptions.Timeout:
         st.error("The request took too long")
-except requests.exceptions.ConnectionError:
-    with tab_health:
+
+    except requests.exceptions.ConnectionError:
         st.error("Could not connect to the server")
-except requests.exceptions.HTTPError as error:
-    if error.response is not None:
-        with tab_health:
-            st.error(f"The server said no: {error.response.status_code}")
-    else:
-        with tab_health:
-            st.error("An HTTP error occurred.")
-except requests.exceptions.JSONDecodeError:
-    with tab_health:
-        st.error("The answer was not JSON")
-except requests.exceptions.RequestException as error:
-    with tab_health:
-        st.error(f"Something else went wrong: {type(error).__name__}")
+
+    except requests.exceptions.HTTPError as error:
+        status = error.response.status_code
+        st.error(f"API returned HTTP {status}")
+
+    except requests.exceptions.JSONDecodeError:
+        st.error("The response was not valid JSON")
+
+    except requests.exceptions.RequestException as error:
+        st.error(f"Request failed: {error}")
