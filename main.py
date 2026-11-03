@@ -4,8 +4,11 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException
 
 from auth import require_api_key
+
 from database import db_connect
-from models import LoanCreate, LoanReturn,BookCreate
+from models import LoanCreate, LoanReturn, BookCreate
+
+
 
 app = FastAPI(title="Book Club Library API")
 
@@ -72,8 +75,7 @@ def insert_book(conn: Connection, book: BookCreate) -> dict:
         "published": published,
     }
     
-    
-@app.post("/books", status_code=201)
+@app.post("/books", dependencies=[Depends(require_api_key)], status_code=201)
 def create_books(
     data: BookCreate | list[BookCreate],
     conn: Annotated[Connection, Depends(get_db)],
@@ -102,13 +104,15 @@ def create_books(
             "books": results,
         }
 
+    
+
     except IntegrityError as error:
         conn.rollback()
         print("DATABASE ERROR:", repr(error))
 
         raise HTTPException(
             status_code=409,
-            detail="Books could not be added because of a database constraint",
+            detail="Internal database error",
         ) from error
 
     except SQLiteError as error:
@@ -117,11 +121,10 @@ def create_books(
 
         raise HTTPException(
             status_code=500,
-            detail=f"Database error: {error}",
+            detail="Internal database error",
         ) from error
 
-
-@app.post("/loans", dependencies=[Depends(require_api_key)], status_code=201)
+@app.post("/loans", status_code=201)
 def create_loan(loan: LoanCreate, conn: Annotated[Connection, Depends(get_db)]):
     member = conn.execute(
         "SELECT 1 FROM members WHERE member_id = ?",
@@ -173,7 +176,7 @@ def create_loan(loan: LoanCreate, conn: Annotated[Connection, Depends(get_db)]):
     return {"loan_id": cursor.lastrowid}
 
 
-@app.patch("/loans/{loan_id}/return", dependencies=[Depends(require_api_key)])
+@app.patch("/loans/{loan_id}/return")
 def return_loan(
     loan_id: int, loan: LoanReturn, conn: Annotated[Connection, Depends(get_db)]
 ):
