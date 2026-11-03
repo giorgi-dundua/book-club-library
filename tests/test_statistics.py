@@ -23,13 +23,10 @@ loans = [
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
+def client(tmp_path):
     # Create a separate database for this test.
     db_path = tmp_path / "test_bookclub.db"
     schema_path = Path(__file__).resolve().parents[1] / "schema.sql"
-
-    test_key = "somekey"
-    monkeypatch.setenv("API_KEY", test_key)
 
     conn = sqlite3.connect(db_path)
     try:
@@ -69,7 +66,6 @@ def client(tmp_path, monkeypatch):
 
     try:
         with TestClient(app) as test_client:
-            test_client.headers["X-API-Key"] = test_key
             yield test_client
     finally:
         app.dependency_overrides.pop(get_db, None)
