@@ -121,7 +121,8 @@ def delete_member(
 
     try:
         if loans_record:
-            anonomized_member = conn.execute(
+            # Creates psudo-anonomized data derived from current field
+            psudo_anonomized = conn.execute(
                 'SELECT SUBSTR(member_name, 1, 1) || "." as name_initial, '
                 'SUBSTR(email, 1, 1) || "*****" || SUBSTR(email, INSTR(email, "@")) as masked_email, '
                 '"******" || SUBSTR(phone, -2) as masked_phone '
@@ -129,11 +130,14 @@ def delete_member(
                 (member_id,)
             ).fetchone()
 
+            # Hard coded default field placeholders for anonomized member
+            anonomized_data = ('$deleted', '$deleted', '$deleted', date(2000,1,1))
+
             conn.execute(
                 'UPDATE members SET '
                 'member_name = ?, email = ?, phone = ?, deleted = 1, joined = ? '
                 'WHERE member_id = ?',
-                (*anonomized_member, date(2000,1,1), member_id,)
+                (*anonomized_data, member_id,)
             )
         else:
             conn.execute(
