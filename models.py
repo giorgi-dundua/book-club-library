@@ -1,6 +1,6 @@
 from datetime import date
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class LoanCreate(BaseModel):
@@ -12,3 +12,45 @@ class LoanCreate(BaseModel):
 
 class LoanReturn(BaseModel):
     return_date: date
+
+
+
+
+
+class BookCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    authors: list[str] = Field(min_length=1)
+    published_year: int | None = Field(default=None, ge=1, le=9999)
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Book title cannot be empty")
+        return value
+
+    @field_validator("authors")
+    @classmethod
+    def validate_authors(cls, values: list[str]) -> list[str]:
+        cleaned = []
+        seen = set()
+
+        for author in values:
+            author = author.strip()
+
+            if not author:
+                raise ValueError("Author name cannot be empty")
+
+            if author.casefold() not in seen:
+                cleaned.append(author)
+                seen.add(author.casefold())
+
+        if not cleaned:
+            raise ValueError("At least one author is required")
+
+        return cleaned
+
+
+class BulkBookCreate(BaseModel):
+    books: list[BookCreate] = Field(min_length=1, max_length=100)

@@ -1,10 +1,10 @@
-from sqlite3 import Connection, IntegrityError
+from sqlite3 import Connection, IntegrityError , Error as SQLiteError
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException
 
 from database import db_connect
-from models import LoanCreate, LoanReturn
+from models import LoanCreate, LoanReturn,BookCreate
 
 app = FastAPI(title="Book Club Library API")
 
@@ -20,6 +20,104 @@ def get_db():
         yield conn
     finally:
         conn.close()
+        
+def insert_book(conn: Connection, book: BookCreate) -> dict:
+    published = (
+        f"{book.published_year}-01-01"
+        if book.published_year is not None
+        else None
+    )
+
+    cursor = conn.execute(
+        "INSERT INTO books (title, published) VALUES (?, ?)",
+        (book.title, published),
+    )
+
+    book_id = cursor.lastrowid
+
+    for author_name in book.authors:
+        author = conn.execute(
+            """
+            SELECT author_id
+            FROM authors
+            WHERE LOWER(author_name) = LOWER(?)
+            ORDER BY author_id
+            LIMIT 1
+            """,
+            (author_name,),
+        ).fetchone()
+
+        if author is None:
+            author_cursor = conn.execute(
+                "INSERT INTO authors (author_name) VALUES (?)",
+                (author_name,),
+            )
+            author_id = author_cursor.lastrowid
+        else:
+            author_id = author[0]
+
+        conn.execute(
+            """
+            INSERT INTO book_author (book_id, author_id)
+            VALUES (?, ?)
+            """,
+            (book_id, author_id),
+        )
+
+    return {
+        "book_id": book_id,
+        "title": book.title,
+        "authors": book.authors,
+        "published": published,
+    }
+    
+    
+@app.post("/books", status_code=201)
+def create_books(
+    data: BookCreate | list[BookCreate],
+    conn: Annotated[Connection, Depends(get_db)],
+):
+    books = data if isinstance(data, list) else [data]
+
+    if not books:
+        raise HTTPException(
+            status_code=422,
+            detail="At least one book is required",
+        )
+
+    if len(books) > 100:
+        raise HTTPException(
+            status_code=422,
+            detail="Maximum 100 books can be added at once",
+        )
+
+    try:
+        results = [insert_book(conn, book) for book in books]
+        conn.commit()
+
+        return {
+            "message": "Books added successfully",
+            "count": len(results),
+            "books": results,
+        }
+
+    except IntegrityError as error:
+        conn.rollback()
+        print("DATABASE ERROR:", repr(error))
+
+        raise HTTPException(
+            status_code=409,
+            detail="Books could not be added because of a database constraint",
+        ) from error
+
+    except SQLiteError as error:
+        conn.rollback()
+        print("DATABASE ERROR:", repr(error))
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database error: {error}",
+        ) from error
 
 
 @app.post("/loans", status_code=201)
