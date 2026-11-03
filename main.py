@@ -1,5 +1,6 @@
 from sqlite3 import Connection, IntegrityError
 from typing import Annotated
+from datetime import date
 
 from fastapi import Depends, FastAPI, HTTPException
 
@@ -98,3 +99,50 @@ def return_loan(
         "loan_id": loan_id,
         "return_date": loan.return_date.isoformat(),
     }
+
+
+@app.delete('/members/{member_id}', dependencies=[Depends(require_api_key)], status_code=204)
+def delete_member(
+    member_id: int, conn: Annotated[Connection, Depends(get_db)]
+):
+    member = conn.execute(
+        'SELECT deleted FROM members WHERE member_id = ?',
+        (member_id,)
+    ).fetchone()
+
+    # Member does not exist or is already deleted/anonomized
+    if member is None or member[0] == 1:
+        raise HTTPException(status_code=404, detail='Member not found')
+
+    loans_record = conn.execute(
+        'SELECT COUNT(*) FROM loans WHERE member_id = ?',
+        (member_id,)
+    ).fetchone()[0]
+
+    try:
+        if loans_record:
+            anonomized_member = conn.execute(
+                'SELECT SUBSTR(member_name, 1, 1) || "." as name_initial, '
+                'SUBSTR(email, 1, 1) || "*****" || SUBSTR(email, INSTR(email, "@")) as masked_email, '
+                '"******" || SUBSTR(phone, -2) as masked_phone '
+                'FROM members WHERE member_id = ?',
+                (member_id,)
+            ).fetchone()
+
+            conn.execute(
+                'UPDATE members SET '
+                'member_name = ?, email = ?, phone = ?, deleted = 1, joined = ? '
+                'WHERE member_id = ?',
+                (*anonomized_member, date(2000,1,1), member_id,)
+            )
+        else:
+            conn.execute(
+                'DELETE FROM members WHERE member_id = ?',
+                (member_id,)
+            )
+
+        conn.commit()
+
+    except IntegrityError:
+        conn.rollback()
+        raise
