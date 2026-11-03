@@ -5,7 +5,7 @@ from fastapi import Depends, FastAPI, HTTPException
 
 from auth import require_api_key
 from database import db_connect
-from models import LoanCreate, LoanReturn
+from models import LoanCreate, LoanReturn, MemberUpdate
 
 app = FastAPI(title="Book Club Library API")
 
@@ -98,3 +98,51 @@ def return_loan(
         "loan_id": loan_id,
         "return_date": loan.return_date.isoformat(),
     }
+
+
+@app.patch('/members/{member_id}', dependencies=[Depends(require_api_key)])
+def update_member(
+    member_id: int, changes: MemberUpdate, conn: Annotated[Connection, Depends(get_db)]
+):
+    member = conn.execute(
+        'SELECT member_name, email, phone, deleted from members '
+        'WHERE member_id = ? AND deleted = 0',
+        (member_id,)
+    ).fetchone()
+
+    if member is None:  
+        raise HTTPException(status_code=404, detail='Member not found')
+
+    current_values = dict(zip(
+        ('member_name', 'email', 'phone'),
+        member
+    ))
+    changes_values = changes.model_dump(exclude_unset=True)
+    
+    if all(current_values.get(key) == val for key,val in changes_values.items()):
+        return {'message': 'No changes'}
+
+    changes_placeholders = ', '.join([key+' = ?' for key in changes_values])
+
+    try:
+        conn.execute(
+            'UPDATE OR IGNORE members SET ' +
+            changes_placeholders + ' '
+            'WHERE member_id = ?',
+            (*changes_values.values(), member_id,)
+        )
+        updated_member = conn.execute(
+            'SELECT * from members WHERE member_id = ?',
+            (member_id,)
+        ).fetchone()
+
+        conn.commit()
+
+    except IntegrityError:
+        conn.rollback()
+        raise
+
+    return dict(zip(
+        ('member_id', 'member_name', 'email', 'phone', 'joined', 'deleted'),
+        updated_member
+    ))
