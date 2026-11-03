@@ -110,23 +110,26 @@ def update_member(
         (member_id,)
     ).fetchone()
 
-    print(changes.model_dump(exclude_unset=True))
     if member is None:  
         raise HTTPException(status_code=404, detail='Member not found')
-    
-    values = [
-        val if val is not None else member[i] for i,(_,val) in enumerate(changes)
-    ]
 
-    # Omit deleted from compare
-    if tuple(values) == member[:-1]:
+    current_values = dict(zip(
+        ('member_name', 'email', 'phone'),
+        member
+    ))
+    changes_values = changes.model_dump(exclude_unset=True)
+    
+    if all(current_values.get(key) == val for key,val in changes_values.items()):
         return {'message': 'No changes'}
+
+    changes_placeholders = ', '.join([key+' = ?' for key in changes_values])
 
     try:
         conn.execute(
-            'UPDATE members SET member_name = ?, email = ?, phone = ? '
+            'UPDATE OR IGNORE members SET ' +
+            changes_placeholders + ' '
             'WHERE member_id = ?',
-            (*values, member_id)
+            (*changes_values.values(), member_id,)
         )
         updated_member = conn.execute(
             'SELECT * from members WHERE member_id = ?',
