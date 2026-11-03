@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException
 
 from auth import require_api_key
-from database import db_connect
+from database import db_connect, get_never_borrowed_books
 from models import LoanCreate, LoanReturn
 
 app = FastAPI(title="Book Club Library API")
@@ -21,6 +21,13 @@ def get_db():
         yield conn
     finally:
         conn.close()
+
+
+@app.get("/books/never-borrowed")
+def read_never_borrowed_books(conn: Annotated[Connection, Depends(get_db)]):
+    book_rows = get_never_borrowed_books(conn)
+    keys = ["book_id", "title"]
+    return [dict(zip(keys, row)) for row in book_rows]
 
 
 @app.post("/loans", dependencies=[Depends(require_api_key)], status_code=201)
