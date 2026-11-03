@@ -131,7 +131,7 @@ def delete_member(
             ).fetchone()
 
             # Hard coded default field placeholders for anonomized member
-            anonomized_data = ('$deleted', '$deleted', '$deleted', date(2000,1,1))
+            anonomized_data = ('$deleted', '$deleted@x.x', '+11-1111', date(2000,1,1))
 
             conn.execute(
                 'UPDATE members SET '
