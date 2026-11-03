@@ -12,7 +12,3 @@ class LoanCreate(BaseModel):
 
 class LoanReturn(BaseModel):
     return_date: date
-
-
-class BookSearch(BaseModel):
-    status: str
