@@ -1,14 +1,12 @@
-from sqlite3 import Connection, IntegrityError , Error as SQLiteError
+from sqlite3 import Connection, IntegrityError
+from sqlite3 import Error as SQLiteError
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException
 
 from auth import require_api_key
-
 from database import db_connect
-from models import LoanCreate, LoanReturn, BookCreate
-
-
+from models import BookCreate, LoanCreate, LoanReturn, MemberUpdate
 
 app = FastAPI(title="Book Club Library API")
 
@@ -24,12 +22,11 @@ def get_db():
         yield conn
     finally:
         conn.close()
-        
+
+
 def insert_book(conn: Connection, book: BookCreate) -> dict:
     published = (
-        f"{book.published_year}-01-01"
-        if book.published_year is not None
-        else None
+        f"{book.published_year}-01-01" if book.published_year is not None else None
     )
 
     cursor = conn.execute(
@@ -74,7 +71,8 @@ def insert_book(conn: Connection, book: BookCreate) -> dict:
         "authors": book.authors,
         "published": published,
     }
-    
+
+
 @app.post("/books", dependencies=[Depends(require_api_key)], status_code=201)
 def create_books(
     data: BookCreate | list[BookCreate],
@@ -104,8 +102,6 @@ def create_books(
             "books": results,
         }
 
-    
-
     except IntegrityError as error:
         conn.rollback()
         print("DATABASE ERROR:", repr(error))
@@ -124,7 +120,8 @@ def create_books(
             detail="Internal database error",
         ) from error
 
-@app.post("/loans", status_code=201)
+
+@app.post("/loans", dependencies=[Depends(require_api_key)], status_code=201)
 def create_loan(loan: LoanCreate, conn: Annotated[Connection, Depends(get_db)]):
     member = conn.execute(
         "SELECT 1 FROM members WHERE member_id = ?",
@@ -176,7 +173,7 @@ def create_loan(loan: LoanCreate, conn: Annotated[Connection, Depends(get_db)]):
     return {"loan_id": cursor.lastrowid}
 
 
-@app.patch("/loans/{loan_id}/return")
+@app.patch("/loans/{loan_id}/return", dependencies=[Depends(require_api_key)])
 def return_loan(
     loan_id: int, loan: LoanReturn, conn: Annotated[Connection, Depends(get_db)]
 ):
@@ -199,3 +196,51 @@ def return_loan(
         "loan_id": loan_id,
         "return_date": loan.return_date.isoformat(),
     }
+
+
+@app.patch("/members/{member_id}", dependencies=[Depends(require_api_key)])
+def update_member(
+    member_id: int, changes: MemberUpdate, conn: Annotated[Connection, Depends(get_db)]
+):
+    member = conn.execute(
+        "SELECT member_name, email, phone, deleted from members "
+        "WHERE member_id = ? AND deleted = 0",
+        (member_id,),
+    ).fetchone()
+
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    current_values = dict(zip(("member_name", "email", "phone"), member))
+    changes_values = changes.model_dump(exclude_unset=True)
+
+    if all(current_values.get(key) == val for key, val in changes_values.items()):
+        return {"message": "No changes"}
+
+    changes_placeholders = ", ".join([key + " = ?" for key in changes_values])
+
+    try:
+        conn.execute(
+            "UPDATE OR IGNORE members SET " + changes_placeholders + " "
+            "WHERE member_id = ?",
+            (
+                *changes_values.values(),
+                member_id,
+            ),
+        )
+        updated_member = conn.execute(
+            "SELECT * from members WHERE member_id = ?", (member_id,)
+        ).fetchone()
+
+        conn.commit()
+
+    except IntegrityError:
+        conn.rollback()
+        raise
+
+    return dict(
+        zip(
+            ("member_id", "member_name", "email", "phone", "joined", "deleted"),
+            updated_member,
+        )
+    )
