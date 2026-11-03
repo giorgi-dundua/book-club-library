@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException
 
 from database import db_connect
-from models import LoanCreate, LoanReturn
+from models import LoanCreate, LoanReturn, BookSearch
 
 app = FastAPI(title="Book Club Library API")
 
@@ -97,3 +97,78 @@ def return_loan(
         "loan_id": loan_id,
         "return_date": loan.return_date.isoformat(),
     }
+
+
+@app.get('/books/{title}')
+def search_book(
+    title: int, book_1: BookSearch, conn: Annotated[Connection, Depends(get_db)]
+):
+    book_id = conn.execute(
+        'SELECT book_id FROM books WHERE title = ?',
+        (title,)
+    ).fetchone()
+
+    if book_id is None:
+        raise HTTPException(status_code=404, detail='Book not found')
+
+    validate_loan = conn.execute(
+        'SELECT * FROM loans WHERE book_id == ? AND return_date IS NULL',
+        (book_id,)
+        ).fetchone()
+    
+    if not validate_loan:
+        status = "Not available"
+    else:
+        status = "Available"
+        
+    return {
+        "title": title,
+        "status": status,
+        }
+
+
+
+
+
+# @app.patch('/members/{member_id}', dependencies=[Depends(require_api_key)])
+# def update_member(
+#     member_id: int, changes: MemberUpdate, conn: Annotated[Connection, Depends(get_db)]
+# ):
+#     member = conn.execute(
+#         'SELECT member_name, email, phone, deleted from members WHERE member_id = ?',
+#         (member_id,)
+#     ).fetchone()
+
+#     # Member does not exist or is deleted: 1
+#     if member is None or member[-1] == 1:
+#         raise HTTPException(status_code=404, detail='Member not found')
+    
+#     values = [
+#         val if val is not None else member[i] for i,(_,val) in enumerate(changes)
+#     ]
+
+#     # Omit deleted from compare
+#     if tuple(values) == member[:-1]:
+#         return {'message': 'No changes'}
+
+#     try:
+#         conn.execute(
+#             'UPDATE members SET member_name = ?, email = ?, phone = ? '
+#             'WHERE member_id = ?',
+#             (*values, member_id)
+#         )
+#         updated_member = conn.execute(
+#             'SELECT * from members WHERE member_id = ?',
+#             (member_id,)
+#         ).fetchone()
+
+#         conn.commit()
+
+#     except IntegrityError:
+#         conn.rollback()
+#         raise
+
+#     return dict(zip(
+#         ('member_id', 'member_name', 'email', 'phone', 'joined', 'deleted'),
+#         updated_member
+#     ))
