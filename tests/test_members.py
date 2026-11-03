@@ -55,8 +55,8 @@ def test_update_non_valid_member(client):
         '/members/900',
         json={
             'member_name': 'f00',
-            'email': 'f00',
-            'phone': 'f00'
+            'email': 'f00@f00.com',
+            'phone': '+555-000'
         }
     ) 
     assert response.status_code == 404
@@ -95,13 +95,13 @@ def test_update_member_invalid_type(client):
     assert response.json().get('detail')[0].get('msg') == 'Input should be a valid string'
 
 
-def test_update_member_invalid_column(client):
+def test_update_member_extra_inputs(client):
     response = client.patch(
         '/members/1',
         json={
             'member_id': 2
         }
     )
-    assert response.status_code == 200
-    assert response.json() == {'message': 'No changes'}
+    assert response.status_code == 422
+    assert response.json().get('detail')[0].get('msg') == 'Extra inputs are not permitted'
 
