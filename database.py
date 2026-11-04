@@ -1,6 +1,6 @@
-'''
-SQLite Database Helpers
-'''
+'''SQLite Database Helpers'''
+
+
 import os.path
 from sqlite3 import connect, Connection, IntegrityError, Error
 
