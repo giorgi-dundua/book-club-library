@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from datetime import date
 
 from main import app, get_db
 
@@ -23,9 +24,16 @@ def client(tmp_path, monkeypatch):
 
         # Adding test data needed for testing
         conn.execute(
-            'INSERT INTO members (member_id, member_name, email, phone) '
+            'INSERT INTO members (member_name, email, phone, joined) '
             'VALUES (?, ?, ?, ?)',
-            (1, 'Test Member', 'test@example.com', '555-123456'),
+            ('Test Member', 'test@example.com', 
+            '555-123456', date.today().isoformat(),),
+        )
+        conn.execute(
+            'INSERT INTO members (member_name, email, phone, joined) '
+            'VALUES (?, ?, ?, ?)',
+            ('Test Member 2', 'test2@example.com',
+            '555-990099', date.today().isoformat(),),
         )
         conn.commit()
     finally:
@@ -48,6 +56,37 @@ def client(tmp_path, monkeypatch):
             yield test_client
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+def test_get_members(client):
+    response = client.get(
+        '/members',
+    ) 
+    assert response.status_code == 200
+    assert len(response.json().get('members')) == 2
+
+
+def test_get_member(client):
+    response = client.get(
+        '/members/2',
+    ) 
+    assert response.status_code == 200
+    assert response.json() == {
+        'member_id': 2, 
+        'member_name': 'Test Member 2',
+        'email': 'test2@example.com',
+        'phone': '555-990099',
+        'joined': date.today().isoformat(),
+        'deleted': 0
+    }
+
+
+def test_get_non_valid_member(client):
+    response = client.get(
+        '/members/900',
+    ) 
+    assert response.status_code == 404
+    assert response.json() == {'detail': 'Member not found'}
 
 
 def test_update_non_valid_member(client):
