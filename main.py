@@ -5,13 +5,13 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException
 
 from auth import require_api_key
-from database import db_connect
+from database import db_connect, get_book
 from models import (
     BookCreate,
+    BookPatch,
+    BookUpdate,
     LoanCreate,
     LoanReturn,
-    BookUpdate,
-    BookPatch,
     MemberUpdate,
 )
 
@@ -100,11 +100,7 @@ def save_book_update(
             detail="Book not found",
         )
 
-    published = (
-        f"{published_year}-01-01"
-        if published_year is not None
-        else None
-    )
+    published = f"{published_year}-01-01" if published_year is not None else None
 
     try:
         # Update the main book information.
@@ -125,7 +121,6 @@ def save_book_update(
 
         # Connect the book to its corrected authors.
         for author_name in authors:
-
             author = conn.execute(
                 """
                 SELECT author_id
@@ -257,11 +252,7 @@ def patch_book(
     # Keep existing values for fields not supplied.
     title = changes.get("title", current_book[0])
 
-    published_year = (
-        int(current_book[1][:4])
-        if current_book[1] is not None
-        else None
-    )
+    published_year = int(current_book[1][:4]) if current_book[1] is not None else None
 
     published_year = changes.get(
         "published_year",
@@ -278,7 +269,6 @@ def patch_book(
         published_year=published_year,
         conn=conn,
     )
-
 
 
 @app.post("/books", dependencies=[Depends(require_api_key)], status_code=201)
@@ -327,6 +317,20 @@ def create_books(
             status_code=500,
             detail="Internal database error",
         ) from error
+
+
+@app.get("/books/{book_id}")
+def read_book(
+    book_id: int,
+    conn: Annotated[Connection, Depends(get_db)],
+) -> dict:
+    """Show one book with its authors."""
+    book = get_book(conn, book_id)
+
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    return book
 
 
 @app.post("/loans", dependencies=[Depends(require_api_key)], status_code=201)

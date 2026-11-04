@@ -149,8 +149,6 @@ def test_reject_empty_book_list(client, monkeypatch):
     )
 
     assert response.status_code == 422
-    
-    
 
 
 def test_create_book_without_api_key_returns_401(client, monkeypatch):
@@ -182,9 +180,7 @@ def test_create_book_with_wrong_api_key_returns_401(client, monkeypatch):
     )
 
     assert response.status_code == 401
-    
-    
-    
+
 
 def test_replace_book_information(client, monkeypatch):
     monkeypatch.setenv("API_KEY", "test-key")
@@ -266,6 +262,7 @@ def test_update_nonexistent_book(client, monkeypatch):
     assert response.status_code == 404
     assert response.json()["detail"] == "Book not found"
 
+
 def test_patch_book_without_changes(client, monkeypatch):
     monkeypatch.setenv("API_KEY", "test-key")
     headers = {"X-API-Key": "test-key"}
@@ -289,3 +286,37 @@ def test_patch_book_without_changes(client, monkeypatch):
     )
 
     assert response.status_code == 422
+
+
+def test_get_book_with_multiple_authors(client, monkeypatch):
+    monkeypatch.setenv("API_KEY", "test-key")
+
+    response = client.post(
+        "/books",
+        json={
+            "title": "Good Omens",
+            "authors": ["Neil Gaiman", "Terry Pratchett"],
+            "published_year": 1990,
+        },
+        headers={"X-API-Key": "test-key"},
+    )
+
+    assert response.status_code == 201
+    book_id = response.json()["books"][0]["book_id"]
+
+    response = client.get(f"/books/{book_id}")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "book_id": book_id,
+        "title": "Good Omens",
+        "published_year": 1990,
+        "authors": ["Neil Gaiman", "Terry Pratchett"],
+    }
+
+
+def test_get_nonexistent_book_returns_404(client):
+    response = client.get("/books/99999")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Book not found"
