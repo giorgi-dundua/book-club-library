@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException
 
 from auth import require_api_key
-from database import db_connect
+from database import db_connect, get_book
 from models import BookCreate, LoanCreate, LoanReturn, MemberUpdate
 
 app = FastAPI(title="Book Club Library API")
@@ -119,6 +119,20 @@ def create_books(
             status_code=500,
             detail="Internal database error",
         ) from error
+
+
+@app.get("/books/{book_id}")
+def read_book(
+    book_id: int,
+    conn: Annotated[Connection, Depends(get_db)],
+) -> dict:
+    """Show one book with its authors."""
+    book = get_book(conn, book_id)
+
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    return book
 
 
 @app.post("/loans", dependencies=[Depends(require_api_key)], status_code=201)
