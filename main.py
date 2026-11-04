@@ -2,7 +2,7 @@ from sqlite3 import Connection, IntegrityError
 from sqlite3 import Error as SQLiteError
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 
 from auth import require_api_key
 from database import (
@@ -475,3 +475,29 @@ def read_book_loan_statistics(conn: Annotated[Connection, Depends(get_db)]):
     book_rows = get_book_loan_statistics(conn)
     keys = ["book_id", "title", "total_loans"]
     return [dict(zip(keys, row)) for row in book_rows]
+
+
+
+
+@app.get("/members", status_code=200)
+def find_members(
+    conn: Annotated[Connection, Depends(get_db)], member_id: str | None = Query(default=None)
+):
+    members = conn.execute(
+        """
+        SELECT member_name, email, phone, joined
+        FROM members
+        WHERE member_id = ?
+        """,
+        (member_id,),
+    ).fetchone()
+
+    if members is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    return dict(
+        zip(
+            ("member_name", "email", "phone", "joined"),
+            members,
+        )
+    )
