@@ -477,20 +477,28 @@ def read_book_loan_statistics(conn: Annotated[Connection, Depends(get_db)]):
     return [dict(zip(keys, row)) for row in book_rows]
 
 
-
-
 @app.get("/members", status_code=200)
 def find_members(
-    conn: Annotated[Connection, Depends(get_db)], member_id: str | None = Query(default=None)
+    member_id: int, conn: Annotated[Connection, Depends(get_db)]
 ):
-    members = conn.execute(
+    if member_id == 0:
+        command = (
+            """
+            SELECT member_name, email, phone, joined
+            FROM members
+            """)
+        
+        members = conn.execute(sql).fetchall()
+        
+    else:
+        sql = """
+            SELECT member_name, email, phone, joined
+            FROM members
+            WHERE member_id = ?
         """
-        SELECT member_name, email, phone, joined
-        FROM members
-        WHERE member_id = ?
-        """,
-        (member_id,),
-    ).fetchone()
+
+        members = conn.execute(command, (member_id,),
+        ).fetchone()
 
     if members is None:
         raise HTTPException(status_code=404, detail="Member not found")
