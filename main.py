@@ -155,6 +155,8 @@ def get_loans(conn: Annotated[Connection, Depends(get_db)]):
             overdue_loans.append(data)
         loans.append(data)
 
+    overdue_loans.sort(key=lambda x: x.get('due_date'))
+
     return {
         'count': count,
         'active_loans': loans, 
@@ -320,6 +322,8 @@ def get_member_loans(member_id: int, conn: Annotated[Connection, Depends(get_db)
         if data.get('due_date') < date.today().isoformat():
             overdue_loans.append(data)
         loans.append(data)
+
+    overdue_loans.sort(key=lambda x: x.get('due_date'))
 
     return {
         'member_id': member_id,
