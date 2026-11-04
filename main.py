@@ -6,7 +6,8 @@ from fastapi import Depends, FastAPI, HTTPException
 
 from auth import require_api_key
 from database import db_connect
-from models import BookCreate, LoanCreate, LoanReturn, MemberUpdate
+from models import BookCreate, LoanCreate, LoanReturn, MemberUpdate, MemberCreate
+import datetime
 
 app = FastAPI(title="Book Club Library API")
 
@@ -244,3 +245,38 @@ def update_member(
             updated_member,
         )
     )
+
+
+@app.post("/members", dependencies=[Depends(require_api_key)], status_code=201)
+def create_member(member: MemberCreate, conn: Annotated[Connection, Depends(get_db)]):
+    
+    # Check if member exist
+    existing_member = conn.execute(
+        "SELECT email FROM members WHERE email = ?",
+        (MemberCreate.email,),
+    ).fetchone()
+
+    if existing_member:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    
+    try:
+        conn.execute(
+            "INSERT INTO members (member_name, email, phone, joined) VALUES (?, ?, ?, ?)", 
+            (member.member_name, member.email, member.phone, datetime.date.today().strftime("%Y-%m-%d")),
+        )
+
+        registerd_member = conn.execute(
+                    "SELECT * from members WHERE email = ?", (member.email,)
+                ).fetchone()
+        
+        conn.commit()
+    except IntegrityError:
+        conn.rollback()
+        raise
+
+    return dict(
+            zip(
+                ("member_id", "member_name", "email", "phone", "joined", "deleted"),
+                registerd_member,
+            )
+        )
