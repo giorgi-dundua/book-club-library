@@ -135,6 +135,31 @@ def validate_add_author(author_name: str) -> bool:
     return not db_select(command, author_name)
 
 
+def get_book(conn: Connection, book_id: int) -> dict | None:
+    """Return one book with its authors, or None if it does not exist."""
+    rows = conn.execute(
+        """
+        SELECT b.book_id, b.title, b.published, a.author_name
+        FROM books b
+        LEFT JOIN book_author ba ON ba.book_id = b.book_id
+        LEFT JOIN authors a ON a.author_id = ba.author_id
+        WHERE b.book_id = ?
+        ORDER BY a.author_id
+        """,
+        (book_id,),
+    ).fetchall()
+
+    if not rows:
+        return None
+
+    return {
+        "book_id": rows[0][0],
+        "title": rows[0][1],
+        "published_year": int(rows[0][2][:4]) if rows[0][2] else None,
+        "authors": [row[3] for row in rows if row[3]],
+    }
+
+
 def get_never_borrowed_books(conn: Connection) -> list[tuple[int, str]]:
     command = (
         "SELECT b.book_id, b.title "
