@@ -266,6 +266,17 @@ def delete_book(
 
     try:
         if not loans_record:
+
+            conn.execute(
+                """
+                DELETE book_author
+                FROM book_author ba
+                JOIN books b ba.book_id = b.book_id
+                WHERE book_id = ?'
+                """,
+                (book_id,)
+            )
+
             conn.execute(
                 'DELETE FROM books WHERE book_id = ?',
                 (book_id,)
