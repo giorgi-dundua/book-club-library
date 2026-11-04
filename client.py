@@ -8,7 +8,7 @@ PUBLISHED_YEAR_MAX = 9999
 st.set_page_config(page_title="Book Club Library", layout="wide")
 
 st.title("Book Club Library")
-st.caption("UI prototype — sample book data; API health check connected")
+st.caption("UI prototype — Books tab uses sample data")
 
 books = [
     {"ID": 1, "Title": "Dune", "Author": "Frank Herbert"},
@@ -66,7 +66,27 @@ with tab_loans:
     st.info("Borrow and return forms will be added here.")
 
 with tab_stats:
-    st.metric("Books in sample catalogue", len(books))
+    if st.button("Most borrowed"):
+        try:
+            result = api.get_most_borrowed_books()
+            if result:
+                st.dataframe(result, hide_index=True)
+            else:
+                st.info("No books in the catalogue")
+
+        except LibraryApiError as error:
+            st.error(str(error))
+
+    if st.button("Never borrowed"):
+        try:
+            result = api.get_never_borrowed_books()
+            if result:
+                st.dataframe(result, hide_index=True)
+            else:
+                st.info("No never-borrowed books found")
+
+        except LibraryApiError as error:
+            st.error(str(error))
 
 
 with tab_health:

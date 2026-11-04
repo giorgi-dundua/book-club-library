@@ -58,6 +58,12 @@ class LibraryApiClient:
             authenticated=True,
         )
 
+    def get_most_borrowed_books(self) -> list[dict]:
+        return self._request("GET", "/statistics/most-borrowed")
+
+    def get_never_borrowed_books(self) -> list[dict]:
+        return self._request("GET", "/books/never-borrowed")
+
 
 class LibraryApiError(Exception):
     pass
