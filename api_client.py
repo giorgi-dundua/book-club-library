@@ -22,21 +22,39 @@ class LibraryApiClient:
                 raise LibraryApiError("API_KEY is not configured.")
             headers["X-API-Key"] = self.api_key
 
-        response = requests.request(
-            method, f"{self.base_url}{path}", headers=headers, timeout=timeout, **kwargs
-        )
+        try:
+            response = requests.request(
+                method,
+                f"{self.base_url}{path}",
+                headers=headers,
+                timeout=timeout,
+                **kwargs,
+            )
 
-        response.raise_for_status()
-        return response.json()
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.Timeout as error:
+            raise LibraryApiError("The request took too long.") from error
+        except requests.exceptions.ConnectionError as error:
+            raise LibraryApiError("Could not connect to the server") from error
+        except requests.exceptions.JSONDecodeError as error:
+            raise LibraryApiError("The response was not valid JSON") from error
+        except requests.exceptions.HTTPError as error:
+            status = error.response.status_code
+            raise LibraryApiError(f"API returned HTTP {status}") from error
+        except requests.exceptions.RequestException as error:
+            raise LibraryApiError("The API request failed.") from error
 
     def check_health(self) -> dict:
         return self._request("GET", "/health")
 
-    def create_book(self, title: str, authors: list[str]) -> dict:
+    def create_book(
+        self, title: str, authors: list[str], published_year: int | None = None
+    ) -> dict:
         return self._request(
             "POST",
             "/books",
-            json={"title": title, "authors": authors},
+            json={"title": title, "authors": authors, "published_year": published_year},
             authenticated=True,
         )
 
