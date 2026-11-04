@@ -269,10 +269,8 @@ def delete_book(
 
             conn.execute(
                 """
-                DELETE book_author
-                FROM book_author ba
-                JOIN books b ba.book_id = b.book_id
-                WHERE book_id = ?'
+                DELETE FROM book_author 
+                WHERE book_id = ?
                 """,
                 (book_id,)
             )
@@ -284,7 +282,7 @@ def delete_book(
 
             conn.commit()
         else:
-            raise HTTPException(status_code=404, detail='Deleting book failed, only books with no loan records can be deleted')
+            raise HTTPException(status_code=409, detail='Deleting book failed, only books with no loan records can be deleted')
 
     except IntegrityError:
         conn.rollback()
