@@ -64,9 +64,3 @@ class MemberUpdate(BaseModel):
         max_length=25,
         default=None,
     )
-
-
-class MemberCreate(BaseModel):
-    member_name: str
-    email: str
-    phone: str

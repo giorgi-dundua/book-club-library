@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI, HTTPException
 
 from auth import require_api_key
 from database import db_connect
-from models import BookCreate, LoanCreate, LoanReturn, MemberUpdate, MemberCreate
+from models import BookCreate, LoanCreate, LoanReturn, MemberUpdate
 import datetime
 
 app = FastAPI(title="Book Club Library API")
@@ -247,36 +247,34 @@ def update_member(
     )
 
 
-@app.post("/members", dependencies=[Depends(require_api_key)], status_code=201)
-def create_member(member: MemberCreate, conn: Annotated[Connection, Depends(get_db)]):
-    
-    # Check if member exist
-    existing_member = conn.execute(
-        "SELECT email FROM members WHERE email = ?",
-        (MemberCreate.email,),
+@app.delete('/books/{book_id}', dependencies=[Depends(require_api_key)], status_code=204)
+def delete_book(
+    book_id: int, conn: Annotated[Connection, Depends(get_db)]
+):
+    book = conn.execute(
+        'SELECT * FROM books WHERE book_id = ?',
+        (book_id,)
     ).fetchone()
 
-    if existing_member:
-        raise HTTPException(status_code=409, detail="Email already registered")
-    
-    try:
-        conn.execute(
-            "INSERT INTO members (member_name, email, phone, joined) VALUES (?, ?, ?, ?)", 
-            (member.member_name, member.email, member.phone, datetime.date.today().strftime("%Y-%m-%d")),
-        )
+    if book is None:
+        raise HTTPException(status_code=404, detail='Book not found')
 
-        registerd_member = conn.execute(
-                    "SELECT * from members WHERE email = ?", (member.email,)
-                ).fetchone()
-        
-        conn.commit()
+    loans_record = conn.execute(
+        'SELECT COUNT(*) FROM loans WHERE book_id = ?',
+        (book_id,)
+    ).fetchone()[0]
+
+    try:
+        if not loans_record:
+            conn.execute(
+                'DELETE FROM books WHERE book_id = ?',
+                (book_id,)
+            )
+
+            conn.commit()
+        else:
+            raise HTTPException(status_code=404, detail='Deleting book failed, only books with no loan records can be deleted')
+
     except IntegrityError:
         conn.rollback()
         raise
-
-    return dict(
-            zip(
-                ("member_id", "member_name", "email", "phone", "joined", "deleted"),
-                registerd_member,
-            )
-        )
