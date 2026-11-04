@@ -1,11 +1,13 @@
 from sqlite3 import Connection, IntegrityError
+from sqlite3 import Error as SQLiteError
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException
 
 from auth import require_api_key
 from database import db_connect
-from models import LoanCreate, LoanReturn
+from models import BookCreate, LoanCreate, LoanReturn, MemberUpdate, MemberCreate
+import datetime
 
 app = FastAPI(title="Book Club Library API")
 
@@ -23,7 +25,104 @@ def get_db():
         conn.close()
 
 
-@app.post("/loans", status_code=201)
+def insert_book(conn: Connection, book: BookCreate) -> dict:
+    published = (
+        f"{book.published_year}-01-01" if book.published_year is not None else None
+    )
+
+    cursor = conn.execute(
+        "INSERT INTO books (title, published) VALUES (?, ?)",
+        (book.title, published),
+    )
+
+    book_id = cursor.lastrowid
+
+    for author_name in book.authors:
+        author = conn.execute(
+            """
+            SELECT author_id
+            FROM authors
+            WHERE LOWER(author_name) = LOWER(?)
+            ORDER BY author_id
+            LIMIT 1
+            """,
+            (author_name,),
+        ).fetchone()
+
+        if author is None:
+            author_cursor = conn.execute(
+                "INSERT INTO authors (author_name) VALUES (?)",
+                (author_name,),
+            )
+            author_id = author_cursor.lastrowid
+        else:
+            author_id = author[0]
+
+        conn.execute(
+            """
+            INSERT INTO book_author (book_id, author_id)
+            VALUES (?, ?)
+            """,
+            (book_id, author_id),
+        )
+
+    return {
+        "book_id": book_id,
+        "title": book.title,
+        "authors": book.authors,
+        "published": published,
+    }
+
+
+@app.post("/books", dependencies=[Depends(require_api_key)], status_code=201)
+def create_books(
+    data: BookCreate | list[BookCreate],
+    conn: Annotated[Connection, Depends(get_db)],
+):
+    books = data if isinstance(data, list) else [data]
+
+    if not books:
+        raise HTTPException(
+            status_code=422,
+            detail="At least one book is required",
+        )
+
+    if len(books) > 100:
+        raise HTTPException(
+            status_code=422,
+            detail="Maximum 100 books can be added at once",
+        )
+
+    try:
+        results = [insert_book(conn, book) for book in books]
+        conn.commit()
+
+        return {
+            "message": "Books added successfully",
+            "count": len(results),
+            "books": results,
+        }
+
+    except IntegrityError as error:
+        conn.rollback()
+        print("DATABASE ERROR:", repr(error))
+
+        raise HTTPException(
+            status_code=409,
+            detail="Internal database error",
+        ) from error
+
+    except SQLiteError as error:
+        conn.rollback()
+        print("DATABASE ERROR:", repr(error))
+
+        raise HTTPException(
+            status_code=500,
+            detail="Internal database error",
+        ) from error
+
+
+@app.post("/loans", dependencies=[Depends(require_api_key)], status_code=201)
 def create_loan(loan: LoanCreate, conn: Annotated[Connection, Depends(get_db)]):
     member = conn.execute(
         "SELECT 1 FROM members WHERE member_id = ?",
@@ -75,7 +174,7 @@ def create_loan(loan: LoanCreate, conn: Annotated[Connection, Depends(get_db)]):
     return {"loan_id": cursor.lastrowid}
 
 
-@app.patch("/loans/{loan_id}/return")
+@app.patch("/loans/{loan_id}/return", dependencies=[Depends(require_api_key)])
 def return_loan(
     loan_id: int, loan: LoanReturn, conn: Annotated[Connection, Depends(get_db)]
 ):
@@ -100,34 +199,84 @@ def return_loan(
     }
 
 
-@app.delete('/books/{book_id}', dependencies=[Depends(require_api_key)], status_code=204)
-def delete_book(
-    book_id: int, conn: Annotated[Connection, Depends(get_db)]
+@app.patch("/members/{member_id}", dependencies=[Depends(require_api_key)])
+def update_member(
+    member_id: int, changes: MemberUpdate, conn: Annotated[Connection, Depends(get_db)]
 ):
-    book = conn.execute(
-        'SELECT book_id FROM books WHERE book_id = ?',
-        (book_id,)
+    member = conn.execute(
+        "SELECT member_name, email, phone, deleted from members "
+        "WHERE member_id = ? AND deleted = 0",
+        (member_id,),
     ).fetchone()
 
-    if book is None:
-        raise HTTPException(status_code=404, detail='Book not found')
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
 
-    loans_record = conn.execute(
-        'SELECT COUNT(*) FROM loans WHERE book_id = ?',
-        (book_id,)
-    ).fetchone()[0]
+    current_values = dict(zip(("member_name", "email", "phone"), member))
+    changes_values = changes.model_dump(exclude_unset=True)
+
+    if all(current_values.get(key) == val for key, val in changes_values.items()):
+        return {"message": "No changes"}
+
+    changes_placeholders = ", ".join([key + " = ?" for key in changes_values])
 
     try:
-        if not loans_record:
-            conn.execute(
-                'DELETE FROM books WHERE book_id = ?',
-                (book_id,)
-            )
+        conn.execute(
+            "UPDATE OR IGNORE members SET " + changes_placeholders + " "
+            "WHERE member_id = ?",
+            (
+                *changes_values.values(),
+                member_id,
+            ),
+        )
+        updated_member = conn.execute(
+            "SELECT * from members WHERE member_id = ?", (member_id,)
+        ).fetchone()
 
-            conn.commit()
-        else:
-            raise HTTPException(status_code=404, detail='Deleting book failed, only books with no loan records can be deleted')
+        conn.commit()
 
     except IntegrityError:
         conn.rollback()
         raise
+
+    return dict(
+        zip(
+            ("member_id", "member_name", "email", "phone", "joined", "deleted"),
+            updated_member,
+        )
+    )
+
+
+@app.post("/members", dependencies=[Depends(require_api_key)], status_code=201)
+def create_member(member: MemberCreate, conn: Annotated[Connection, Depends(get_db)]):
+    
+    # Check if member exist
+    existing_member = conn.execute(
+        "SELECT email FROM members WHERE email = ?",
+        (MemberCreate.email,),
+    ).fetchone()
+
+    if existing_member:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    
+    try:
+        conn.execute(
+            "INSERT INTO members (member_name, email, phone, joined) VALUES (?, ?, ?, ?)", 
+            (member.member_name, member.email, member.phone, datetime.date.today().strftime("%Y-%m-%d")),
+        )
+
+        registerd_member = conn.execute(
+                    "SELECT * from members WHERE email = ?", (member.email,)
+                ).fetchone()
+        
+        conn.commit()
+    except IntegrityError:
+        conn.rollback()
+        raise
+
+    return dict(
+            zip(
+                ("member_id", "member_name", "email", "phone", "joined", "deleted"),
+                registerd_member,
+            )
+        )
