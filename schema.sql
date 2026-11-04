@@ -41,7 +41,11 @@ CREATE TABLE loans (
     book_id     INTEGER NOT NULL,
     loan_date   DATETIME NOT NULL,
     due_date    DATETIME NOT NULL,
-    return_date DATETIME,
+    return_date DATETIME DEFAULT NULL,
     FOREIGN KEY (member_id) REFERENCES members(member_id),
     FOREIGN KEY (book_id) REFERENCES books(book_id)
 );
+
+CREATE UNIQUE INDEX unique_active_loan_per_book
+ON loans (book_id)
+WHERE return_date IS NULL;

@@ -1,7 +1,12 @@
-from fastapi import FastAPI, HTTPException
+from sqlite3 import Connection, IntegrityError
+from sqlite3 import Error as SQLiteError
+from typing import Annotated
 
-from  database import create_book, get_book
-from models import BookCreate
+from fastapi import Depends, FastAPI, HTTPException
+
+from auth import require_api_key
+from database import db_connect, get_book
+from models import BookCreate, LoanCreate, LoanReturn, MemberUpdate
 
 app = FastAPI(title="Book Club Library API")
 
@@ -11,18 +16,245 @@ def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/books", status_code=201)
-def add_book(book: BookCreate) -> dict:
-    """Add a book and its authors to the catalogue."""
-    published = f"{book.published_year}-01-01" if book.published_year else None
-    book_id = create_book(book.title, book.authors, published)
-    return get_book(book_id)
+def get_db():
+    conn = db_connect()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+def insert_book(conn: Connection, book: BookCreate) -> dict:
+    published = (
+        f"{book.published_year}-01-01" if book.published_year is not None else None
+    )
+
+    cursor = conn.execute(
+        "INSERT INTO books (title, published) VALUES (?, ?)",
+        (book.title, published),
+    )
+
+    book_id = cursor.lastrowid
+
+    for author_name in book.authors:
+        author = conn.execute(
+            """
+            SELECT author_id
+            FROM authors
+            WHERE LOWER(author_name) = LOWER(?)
+            ORDER BY author_id
+            LIMIT 1
+            """,
+            (author_name,),
+        ).fetchone()
+
+        if author is None:
+            author_cursor = conn.execute(
+                "INSERT INTO authors (author_name) VALUES (?)",
+                (author_name,),
+            )
+            author_id = author_cursor.lastrowid
+        else:
+            author_id = author[0]
+
+        conn.execute(
+            """
+            INSERT INTO book_author (book_id, author_id)
+            VALUES (?, ?)
+            """,
+            (book_id, author_id),
+        )
+
+    return {
+        "book_id": book_id,
+        "title": book.title,
+        "authors": book.authors,
+        "published": published,
+    }
+
+
+@app.post("/books", dependencies=[Depends(require_api_key)], status_code=201)
+def create_books(
+    data: BookCreate | list[BookCreate],
+    conn: Annotated[Connection, Depends(get_db)],
+):
+    books = data if isinstance(data, list) else [data]
+
+    if not books:
+        raise HTTPException(
+            status_code=422,
+            detail="At least one book is required",
+        )
+
+    if len(books) > 100:
+        raise HTTPException(
+            status_code=422,
+            detail="Maximum 100 books can be added at once",
+        )
+
+    try:
+        results = [insert_book(conn, book) for book in books]
+        conn.commit()
+
+        return {
+            "message": "Books added successfully",
+            "count": len(results),
+            "books": results,
+        }
+
+    except IntegrityError as error:
+        conn.rollback()
+        print("DATABASE ERROR:", repr(error))
+
+        raise HTTPException(
+            status_code=409,
+            detail="Internal database error",
+        ) from error
+
+    except SQLiteError as error:
+        conn.rollback()
+        print("DATABASE ERROR:", repr(error))
+
+        raise HTTPException(
+            status_code=500,
+            detail="Internal database error",
+        ) from error
 
 
 @app.get("/books/{book_id}")
-def read_book(book_id: int) -> dict:
+def read_book(
+    book_id: int,
+    conn: Annotated[Connection, Depends(get_db)],
+) -> dict:
     """Show one book with its authors."""
-    book = get_book(book_id)
+    book = get_book(conn, book_id)
+
     if book is None:
         raise HTTPException(status_code=404, detail="Book not found")
+
     return book
+
+
+@app.post("/loans", dependencies=[Depends(require_api_key)], status_code=201)
+def create_loan(loan: LoanCreate, conn: Annotated[Connection, Depends(get_db)]):
+    member = conn.execute(
+        "SELECT 1 FROM members WHERE member_id = ?",
+        (loan.member_id,),
+    ).fetchone()
+    book = conn.execute(
+        "SELECT 1 FROM books WHERE book_id = ?",
+        (loan.book_id,),
+    ).fetchone()
+    active_loan = conn.execute(
+        "SELECT 1 FROM loans WHERE book_id = ? AND return_date IS NULL LIMIT 1",
+        (loan.book_id,),
+    ).fetchone()
+
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+    if active_loan is not None:
+        raise HTTPException(status_code=409, detail="Book is already borrowed")
+
+    try:
+        cursor = conn.execute(
+            "INSERT INTO loans (member_id, book_id, loan_date, due_date) "
+            "VALUES (?, ?, ?, ?)",
+            (
+                loan.member_id,
+                loan.book_id,
+                loan.loan_date.isoformat(),
+                loan.due_date.isoformat(),
+            ),
+        )
+        conn.commit()
+
+    except IntegrityError as error:
+        conn.rollback()
+
+        if (
+            error.sqlite_errorname == "SQLITE_CONSTRAINT_UNIQUE"
+            and "loans.book_id" in str(error)
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Book is already borrowed",
+            ) from error
+
+        raise
+
+    return {"loan_id": cursor.lastrowid}
+
+
+@app.patch("/loans/{loan_id}/return", dependencies=[Depends(require_api_key)])
+def return_loan(
+    loan_id: int, loan: LoanReturn, conn: Annotated[Connection, Depends(get_db)]
+):
+    cursor = conn.execute(
+        "UPDATE loans SET return_date = ? WHERE loan_id = ? AND return_date IS NULL",
+        (loan.return_date.isoformat(), loan_id),
+    )
+
+    if cursor.rowcount == 0:
+        existing_loan = conn.execute(
+            "SELECT 1 FROM loans WHERE loan_id = ?", (loan_id,)
+        ).fetchone()
+        if existing_loan is None:
+            raise HTTPException(status_code=404, detail="Loan not found")
+        raise HTTPException(status_code=409, detail="Loan was already returned")
+
+    conn.commit()
+
+    return {
+        "loan_id": loan_id,
+        "return_date": loan.return_date.isoformat(),
+    }
+
+
+@app.patch("/members/{member_id}", dependencies=[Depends(require_api_key)])
+def update_member(
+    member_id: int, changes: MemberUpdate, conn: Annotated[Connection, Depends(get_db)]
+):
+    member = conn.execute(
+        "SELECT member_name, email, phone, deleted from members "
+        "WHERE member_id = ? AND deleted = 0",
+        (member_id,),
+    ).fetchone()
+
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    current_values = dict(zip(("member_name", "email", "phone"), member))
+    changes_values = changes.model_dump(exclude_unset=True)
+
+    if all(current_values.get(key) == val for key, val in changes_values.items()):
+        return {"message": "No changes"}
+
+    changes_placeholders = ", ".join([key + " = ?" for key in changes_values])
+
+    try:
+        conn.execute(
+            "UPDATE OR IGNORE members SET " + changes_placeholders + " "
+            "WHERE member_id = ?",
+            (
+                *changes_values.values(),
+                member_id,
+            ),
+        )
+        updated_member = conn.execute(
+            "SELECT * from members WHERE member_id = ?", (member_id,)
+        ).fetchone()
+
+        conn.commit()
+
+    except IntegrityError:
+        conn.rollback()
+        raise
+
+    return dict(
+        zip(
+            ("member_id", "member_name", "email", "phone", "joined", "deleted"),
+            updated_member,
+        )
+    )

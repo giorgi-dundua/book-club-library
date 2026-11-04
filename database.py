@@ -1,93 +1,155 @@
-'''
-SQLite Database Helpers
-'''
+"""SQLite Database Helpers"""
+
 import os.path
-from sqlite3 import connect, Connection
+from sqlite3 import Connection, IntegrityError, connect
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
-db_path = os.path.join(base_dir, 'bookclub.db')
+db_path = os.path.join(base_dir, "bookclub.db")
+
 
 def db_connect() -> Connection:
     conn = connect(db_path)
-    conn.execute('PRAGMA foreign_keys = ON')
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
-conn = db_connect()
 
-''' command using placeholder ? and *args for values '''
-def db_select(command: str, *args) -> list:
-    cursor = conn.cursor()
-    cursor.execute(command, sanitize_input(*args))
-    return cursor.fetchall()
+def db_select(command: str, *args, conn: Connection | None = None) -> list:
+    self_connect = conn is None
+    if self_connect:
+        conn = db_connect()
 
-def db_insert(command: str, *args) -> None:
-    cursor = conn.cursor()
-    cursor.execute(command, sanitize_input(*args))
-    cursor.close()
-    conn.commit()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(command, sanitize_input(*args))
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        if self_connect:
+            conn.close()
 
-def db_insert_many(command: str, values: list) -> None:
-    cursor = conn.cursor()
-    cursor.executemany(command, values)
-    cursor.close()
-    conn.commit()
+
+def db_insert(command: str, *args, conn: Connection | None = None):
+    self_connect = conn is None
+    if self_connect:
+        conn = db_connect()
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(command, sanitize_input(*args))
+        conn.commit()
+    except IntegrityError:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        if self_connect:
+            conn.close()
+
+
+def db_insert_many(command: str, values: list, conn: Connection | None = None):
+    self_connect = conn is None
+    if self_connect:
+        conn = db_connect()
+
+    try:
+        cursor = conn.cursor()
+        cursor.executemany(command, values)
+        conn.commit()
+    except IntegrityError:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        if self_connect:
+            conn.close()
+
+
+def db_update(command: str, *args, conn: Connection | None = None) -> int:
+    self_connect = conn is None
+    if self_connect:
+        conn = db_connect()
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(command, sanitize_input(*args))
+        changes = conn.total_changes
+        conn.commit()
+        return changes
+    except IntegrityError:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        if self_connect:
+            conn.close()
+
+
+def db_delete(command: str, *args, conn: Connection | None = None):
+    self_connect = conn is None
+    if self_connect:
+        conn = db_connect()
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(command, sanitize_input(*args))
+        conn.commit()
+    except IntegrityError:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        if self_connect:
+            conn.close()
+
 
 def sanitize_input(*args) -> tuple:
     return (*args,)
 
 
-def create_book(title: str, authors: list[str], published: str | None) -> int:
-    """Insert a book and its authors in one transaction. Return the book_id."""
-    book_conn = db_connect()
-    try:
-        cursor = book_conn.execute(
-            "INSERT INTO books (title, published) VALUES (?, ?)",
-            (title, published),
-        )
-        book_id = cursor.lastrowid
-
-        for name in authors:
-            row = book_conn.execute(
-                "SELECT author_id FROM authors WHERE author_name = ?",
-                (name,),
-            ).fetchone()
-            if row:
-                author_id = row[0]
-            else:
-                author_id = book_conn.execute(
-                    "INSERT INTO authors (author_name) VALUES (?)",
-                    (name,),
-                ).lastrowid
-            book_conn.execute(
-                "INSERT OR IGNORE INTO book_author (book_id, author_id) "
-                "VALUES (?, ?)",
-                (book_id, author_id),
-            )
-        book_conn.commit()
-        return book_id
-    except Exception:
-        book_conn.rollback()
-        raise
-    finally:
-        book_conn.close()
+def validate_loan(book_id: int) -> bool:
+    """validates that there are no active loans on a book"""
+    command = "SELECT * FROM loans WHERE book_id == ? AND return_date IS NULL"
+    return not db_select(command, book_id)
 
 
-def get_book(book_id: int) -> dict | None:
+def validate_return(member_id: int, book_id: int) -> bool:
+    """validates that the member has an active loan of the book"""
+    command = "SELECT * FROM loans WHERE member_id == ? AND book_id == ? AND return_date IS NULL"
+    return bool(db_select(command, member_id, book_id))
+
+
+def validate_add_book(title: str, author_name: str) -> bool:
+    command = (
+        "SELECT b.title, a.author_name, b.published FROM books b "
+        "JOIN book_author ba ON b.book_id = ba.book_id "
+        "JOIN authors a ON ba.author_id = a.author_id "
+        "WHERE b.title == ? AND a.author_name == ?"
+    )
+    return not db_select(command, title, author_name)
+
+
+def validate_add_author(author_name: str) -> bool:
+    command = "SELECT * FROM authors WHERE author_name == ?"
+    return not db_select(command, author_name)
+
+
+def get_book(conn: Connection, book_id: int) -> dict | None:
     """Return one book with its authors, or None if it does not exist."""
-    book_conn = db_connect()
-    try:
-        rows = book_conn.execute(
-            "SELECT b.book_id, b.title, b.published, a.author_name "
-            "FROM books b "
-            "LEFT JOIN book_author ba ON ba.book_id = b.book_id "
-            "LEFT JOIN authors a ON a.author_id = ba.author_id "
-            "WHERE b.book_id = ?",
-            (book_id,),
-        ).fetchall()
-    finally:
-        book_conn.close()
+    rows = conn.execute(
+        """
+        SELECT b.book_id, b.title, b.published, a.author_name
+        FROM books b
+        LEFT JOIN book_author ba ON ba.book_id = b.book_id
+        LEFT JOIN authors a ON a.author_id = ba.author_id
+        WHERE b.book_id = ?
+        ORDER BY a.author_id
+        """,
+        (book_id,),
+    ).fetchall()
+
     if not rows:
         return None
+
     return {
         "book_id": rows[0][0],
         "title": rows[0][1],
