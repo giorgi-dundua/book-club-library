@@ -135,7 +135,7 @@ def validate_add_author(author_name: str) -> bool:
     return not db_select(command, author_name)
 
 
-def get_never_borrowed_books(conn: Connection) -> list:
+def get_never_borrowed_books(conn: Connection) -> list[tuple[int, str]]:
     command = (
         "SELECT b.book_id, b.title "
         "FROM books b "

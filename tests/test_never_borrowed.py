@@ -78,3 +78,23 @@ def test_never_borrowed_books(client):
     assert response.json() == [
         {"book_id": 4, "title": "Test Book A"},
     ]
+
+
+def test_all_books_have_been_borrowed(client, tmp_path):
+    # Book A is the only book without loan history in the fixture
+    db_path = tmp_path / "test_bookclub.db"
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO loans
+                (member_id, book_id, loan_date, due_date, return_date)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (1, 4, "2026-10-01", "2026-10-15", "2026-10-10"),
+        )
+
+    response = client.get("/books/never-borrowed")
+
+    assert response.status_code == 200
+    assert response.json() == []
