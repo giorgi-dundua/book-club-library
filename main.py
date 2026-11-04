@@ -284,3 +284,45 @@ def update_member(
             updated_member,
         )
     )
+
+
+@app.get('/members/{member_id}/loans', dependencies=[Depends(require_api_key)])
+def get_member_loans(member_id: int, conn: Annotated[Connection, Depends(get_db)]):
+    active_loans = conn.execute(
+        '''
+        SELECT b.title, m.member_name, l.due_date, 
+        l.loan_id, l.member_id, l.book_id 
+        FROM loans l
+        JOIN books b ON l.book_id = b.book_id
+        JOIN members m ON l.member_id = m.member_id
+        WHERE l.return_date IS NULL 
+        AND l.member_id = ?
+        ''',
+        (member_id,)
+    ).fetchall()
+
+    if not active_loans:
+        raise HTTPException(status_code=404, detail="No loans found")
+
+    count = len(active_loans)
+    loans = []
+    overdue_loans = []
+
+    for loan in active_loans:
+        ids = dict(zip(
+            ('loan_id', 'member_id', 'book_id'),
+            loan[-3:]
+        ))
+        data = dict(zip(
+            ('book', 'member', 'due_date', 'id_info'),
+            (*loan[:3],ids)
+        ))
+        if data.get('due_date') < date.today().isoformat():
+            overdue_loans.append(data)
+        loans.append(data)
+
+    return {
+        'member_id': member_id,
+        'count': count,
+        'active_loans': loans, 
+        'overdue_loans': overdue_loans}
