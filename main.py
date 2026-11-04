@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException
 
 from auth import require_api_key
-from database import db_connect, get_book
+from database import db_connect, get_book, get_book_loan_statistics
 from models import (
     BookCreate,
     BookPatch,
@@ -456,3 +456,10 @@ def update_member(
             updated_member,
         )
     )
+
+
+@app.get("/statistics/most-borrowed")
+def read_book_loan_statistics(conn: Annotated[Connection, Depends(get_db)]):
+    book_rows = get_book_loan_statistics(conn)
+    keys = ["book_id", "title", "total_loans"]
+    return [dict(zip(keys, row)) for row in book_rows]
