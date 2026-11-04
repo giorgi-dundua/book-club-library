@@ -190,6 +190,18 @@ def get_book(conn: Connection, book_id: int) -> dict | None:
     }
 
 
+def get_never_borrowed_books(conn: Connection) -> list[tuple[int, str]]:
+    command = (
+        "SELECT b.book_id, b.title "
+        "FROM books b "
+        "LEFT JOIN loans l "
+        "ON l.book_id = b.book_id "
+        "WHERE l.loan_id IS NULL "
+        "ORDER BY b.title ASC"
+    )
+    return db_select(command, conn=conn)
+
+
 def get_book_loan_statistics(conn: Connection) -> list[tuple[int, str, int]]:
     command = (
         "SELECT b.book_id, b.title, COUNT(l.loan_id) AS total_loans "
