@@ -151,6 +151,143 @@ def test_reject_empty_book_list(client, monkeypatch):
     assert response.status_code == 422
 
 
+def test_create_book_without_api_key_returns_401(client, monkeypatch):
+    monkeypatch.setenv("API_KEY", "test-key")
+
+    response = client.post(
+        "/books",
+        json={
+            "title": "The Hobbit",
+            "authors": ["J.R.R. Tolkien"],
+            "published_year": 1937,
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_create_book_with_wrong_api_key_returns_401(client, monkeypatch):
+    monkeypatch.setenv("API_KEY", "test-key")
+
+    response = client.post(
+        "/books",
+        json={
+            "title": "The Hobbit",
+            "authors": ["J.R.R. Tolkien"],
+            "published_year": 1937,
+        },
+        headers={"X-API-Key": "wrong-key"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_replace_book_information(client, monkeypatch):
+    monkeypatch.setenv("API_KEY", "test-key")
+    headers = {"X-API-Key": "test-key"}
+
+    # Create a book first.
+    create_response = client.post(
+        "/books",
+        json={
+            "title": "Wrong Title",
+            "authors": ["Wrong Author"],
+            "published_year": 2000,
+        },
+        headers=headers,
+    )
+
+    assert create_response.status_code == 201
+
+    book_id = create_response.json()["books"][0]["book_id"]
+
+    # Replace all book information.
+    response = client.put(
+        f"/books/{book_id}",
+        json={
+            "title": "Corrected Title",
+            "authors": ["Correct Author"],
+            "published_year": 2020,
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Corrected Title"
+    assert response.json()["authors"] == ["Correct Author"]
+    assert response.json()["published"] == "2020-01-01"
+
+
+def test_partially_update_book_information(client, monkeypatch):
+    monkeypatch.setenv("API_KEY", "test-key")
+    headers = {"X-API-Key": "test-key"}
+
+    create_response = client.post(
+        "/books",
+        json={
+            "title": "Original Title",
+            "authors": ["Original Author"],
+            "published_year": 2000,
+        },
+        headers=headers,
+    )
+
+    book_id = create_response.json()["books"][0]["book_id"]
+
+    # Change only the title.
+    response = client.patch(
+        f"/books/{book_id}",
+        json={"title": "Updated Title"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Updated Title"
+
+    # Other information should remain unchanged.
+    assert response.json()["authors"] == ["Original Author"]
+    assert response.json()["published"] == "2000-01-01"
+
+
+def test_update_nonexistent_book(client, monkeypatch):
+    monkeypatch.setenv("API_KEY", "test-key")
+    headers = {"X-API-Key": "test-key"}
+
+    response = client.patch(
+        "/books/99999",
+        json={"title": "New Title"},
+        headers=headers,
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Book not found"
+
+
+def test_patch_book_without_changes(client, monkeypatch):
+    monkeypatch.setenv("API_KEY", "test-key")
+    headers = {"X-API-Key": "test-key"}
+
+    create_response = client.post(
+        "/books",
+        json={
+            "title": "Original Title",
+            "authors": ["Original Author"],
+            "published_year": 2000,
+        },
+        headers=headers,
+    )
+
+    book_id = create_response.json()["books"][0]["book_id"]
+
+    response = client.patch(
+        f"/books/{book_id}",
+        json={},
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+
+
 def test_get_book_with_multiple_authors(client, monkeypatch):
     monkeypatch.setenv("API_KEY", "test-key")
 
