@@ -135,7 +135,7 @@ def validate_add_author(author_name: str) -> bool:
     return not db_select(command, author_name)
 
 
-def get_book_loan_statistics(conn: Connection) -> list:
+def get_book_loan_statistics(conn: Connection) -> list[tuple[int, str, int]]:
     command = (
         "SELECT b.book_id, b.title, COUNT(l.loan_id) AS total_loans "
         "FROM books b "

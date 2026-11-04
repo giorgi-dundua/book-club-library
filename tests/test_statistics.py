@@ -81,3 +81,23 @@ def test_book_loan_statistics(client):
         {"book_id": 5, "title": "Test Book B", "total_loans": 1},
         {"book_id": 6, "title": "Test Book C", "total_loans": 0},
     ]
+
+
+def test_alphabetical_order_for_equal_loan_counts(client, tmp_path):
+    db_path = tmp_path / "test_bookclub.db"
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO books (book_id, title) VALUES (?, ?)",
+            (7, "Aardvark"),
+        )
+
+    response = client.get("/statistics/most-borrowed")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"book_id": 4, "title": "Test Book A", "total_loans": 2},
+        {"book_id": 5, "title": "Test Book B", "total_loans": 1},
+        {"book_id": 7, "title": "Aardvark", "total_loans": 0},
+        {"book_id": 6, "title": "Test Book C", "total_loans": 0},
+    ]
