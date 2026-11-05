@@ -63,6 +63,28 @@ The API runs locally at:
 - http://127.0.0.1:8000/docs
 - http://127.0.0.1:8000/health
 
+### Run the client
+
+The client uses Streamlit and needs the API to be running.
+Set `API_KEY` in `.env` before starting the API and client. This key is
+needed to add, edit and delete books.
+
+Open two terminals in the project folder. Activate the virtual environment
+in both:
+
+    source .venv/bin/activate
+
+Start the API in the first terminal:
+
+    fastapi dev main.py
+
+Start the client in the second terminal:
+
+    streamlit run client.py
+
+Open the address shown by Streamlit in your browser. The client connects
+to the API at `http://127.0.0.1:8000`.
+
 ### Run tests
 
     python -m pytest -q
