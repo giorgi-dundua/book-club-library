@@ -479,33 +479,52 @@ def read_book_loan_statistics(conn: Annotated[Connection, Depends(get_db)]):
 
 @app.get("/members", status_code=200)
 def find_members(
+    conn: Annotated[Connection, Depends(get_db)]
+):
+    command = (
+        """
+        SELECT * FROM members
+        """)
+        
+    members = conn.execute(command).fetchall()
+
+    if members is None:
+            raise HTTPException(status_code=404, detail="No members found")
+
+    
+    all_members_data = []
+
+    for member in members:        
+        member_data = dict(zip(
+                ("member_id", "member_name", "email", "phone", "joined", "deleted"),
+                *member
+            ))
+
+        all_members_data.append(member_data)
+
+    
+    return {'members': all_members_data}
+
+
+@app.get("/members/{member_id}", status_code=200)
+def find_member(
     member_id: int, conn: Annotated[Connection, Depends(get_db)]
 ):
-    if member_id == 0:
-        command = (
-            """
-            SELECT member_name, email, phone, joined
-            FROM members
-            """)
-        
-        members = conn.execute(sql).fetchall()
-        
-    else:
-        sql = """
-            SELECT member_name, email, phone, joined
-            FROM members
-            WHERE member_id = ?
-        """
+    command = """
+        SELECT * FROM members
+        WHERE member_id = ?
+    """
 
-        members = conn.execute(command, (member_id,),
-        ).fetchone()
+    members = conn.execute(command, (member_id,),
+    ).fetchone()
 
     if members is None:
         raise HTTPException(status_code=404, detail="Member not found")
 
     return dict(
         zip(
-            ("member_name", "email", "phone", "joined"),
+            ("member_id", "member_name", "email", "phone", "joined", "deleted"),
             members,
         )
     )
+
