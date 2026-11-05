@@ -1,6 +1,7 @@
 from sqlite3 import Connection, IntegrityError
 from sqlite3 import Error as SQLiteError
 from typing import Annotated
+from datetime import date
 
 from fastapi import Depends, FastAPI, HTTPException
 
@@ -330,7 +331,7 @@ def create_books(
             detail="Internal database error",
         ) from error
 
-
+        
 @app.get("/books/{book_id}")
 def read_book(
     book_id: int,
@@ -343,6 +344,48 @@ def read_book(
         raise HTTPException(status_code=404, detail="Book not found")
 
     return book
+
+
+@app.get('/loans', dependencies=[Depends(require_api_key)])
+def get_loans(conn: Annotated[Connection, Depends(get_db)]):
+    active_loans = conn.execute(
+        '''
+        SELECT b.title, m.member_name, l.due_date, 
+        l.loan_id, l.member_id, l.book_id 
+        FROM loans l
+        JOIN books b ON l.book_id = b.book_id
+        JOIN members m ON l.member_id = m.member_id
+        WHERE l.return_date IS NULL
+        '''
+    ).fetchall()
+
+    if not active_loans:
+        raise HTTPException(status_code=404, detail="No loans found")
+
+    count = len(active_loans)
+    loans = []
+    overdue_loans = []
+
+    for loan in active_loans:
+        ids = dict(zip(
+            ('loan_id', 'member_id', 'book_id'),
+            loan[-3:]
+        ))
+        data = dict(zip(
+            ('book', 'member', 'due_date', 'id_info'),
+            (*loan[:3],ids)
+        ))
+        if data.get('due_date') < date.today().isoformat():
+            overdue_loans.append(data)
+        loans.append(data)
+
+    overdue_loans.sort(key=lambda x: x.get('due_date'))
+
+    return {
+        'count': count,
+        'active_loans': loans, 
+        'overdue_loans': overdue_loans
+    }
 
 
 @app.post("/loans", dependencies=[Depends(require_api_key)], status_code=201)
@@ -470,6 +513,48 @@ def update_member(
     )
 
 
+@app.get('/members/{member_id}/loans', dependencies=[Depends(require_api_key)])
+def get_member_loans(member_id: int, conn: Annotated[Connection, Depends(get_db)]):
+    active_loans = conn.execute(
+        '''
+        SELECT b.title, m.member_name, l.due_date, 
+        l.loan_id, l.member_id, l.book_id 
+        FROM loans l
+        JOIN books b ON l.book_id = b.book_id
+        JOIN members m ON l.member_id = m.member_id
+        WHERE l.return_date IS NULL 
+        AND l.member_id = ?
+        ''',
+        (member_id,)
+    ).fetchall()
+
+    if not active_loans:
+        raise HTTPException(status_code=404, detail="No loans found")
+
+    count = len(active_loans)
+    loans = []
+    overdue_loans = []
+
+    for loan in active_loans:
+        ids = dict(zip(
+            ('loan_id', 'member_id', 'book_id'),
+            loan[-3:]
+        ))
+        data = dict(zip(
+            ('book', 'member', 'due_date', 'id_info'),
+            (*loan[:3],ids)
+        ))
+        if data.get('due_date') < date.today().isoformat():
+            overdue_loans.append(data)
+        loans.append(data)
+
+    overdue_loans.sort(key=lambda x: x.get('due_date'))
+
+    return {
+        'member_id': member_id,
+        'count': count,
+        'active_loans': loans, 
+        'overdue_loans': overdue_loans}
 @app.get("/statistics/most-borrowed")
 def read_book_loan_statistics(conn: Annotated[Connection, Depends(get_db)]):
     book_rows = get_book_loan_statistics(conn)
