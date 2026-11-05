@@ -253,7 +253,7 @@ def create_member(member: MemberCreate, conn: Annotated[Connection, Depends(get_
     # Check if member exist
     existing_member = conn.execute(
         "SELECT email FROM members WHERE email = ?",
-        (MemberCreate.email,),
+        (member.email,),
     ).fetchone()
 
     if existing_member:
