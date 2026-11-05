@@ -513,6 +513,48 @@ def update_member(
     )
 
 
+@app.delete('/books/{book_id}', dependencies=[Depends(require_api_key)], status_code=204)
+def delete_book(
+    book_id: int, conn: Annotated[Connection, Depends(get_db)]
+):
+    book = conn.execute(
+        'SELECT * FROM books WHERE book_id = ?',
+        (book_id,)
+    ).fetchone()
+
+    if book is None:
+        raise HTTPException(status_code=404, detail='Book not found')
+
+    loans_record = conn.execute(
+        'SELECT COUNT(*) FROM loans WHERE book_id = ?',
+        (book_id,)
+    ).fetchone()[0]
+
+    try:
+        if not loans_record:
+
+            conn.execute(
+                """
+                DELETE FROM book_author 
+                WHERE book_id = ?
+                """,
+                (book_id,)
+            )
+
+            conn.execute(
+                'DELETE FROM books WHERE book_id = ?',
+                (book_id,)
+            )
+
+            conn.commit()
+        else:
+            raise HTTPException(status_code=409, detail='Deleting book failed, only books with no loan records can be deleted')
+
+    except IntegrityError:
+        conn.rollback()
+        raise
+        
+        
 @app.get('/members/{member_id}/loans', dependencies=[Depends(require_api_key)])
 def get_member_loans(member_id: int, conn: Annotated[Connection, Depends(get_db)]):
     active_loans = conn.execute(
@@ -555,6 +597,8 @@ def get_member_loans(member_id: int, conn: Annotated[Connection, Depends(get_db)
         'count': count,
         'active_loans': loans, 
         'overdue_loans': overdue_loans}
+  
+  
 @app.get("/statistics/most-borrowed")
 def read_book_loan_statistics(conn: Annotated[Connection, Depends(get_db)]):
     book_rows = get_book_loan_statistics(conn)
