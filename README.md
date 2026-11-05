@@ -34,6 +34,25 @@ If uv is not installed, use Python's built-in venv:
     source .venv/bin/activate
     python -m pip install -r requirements.txt
 
+### Initialize the database
+
+Create and populate the SQLite database with sample data:
+
+    python seed.py
+
+On first execution, the script creates `bookclub.db`, initializes the
+database tables, and inserts sample books, authors, members, and loans.
+
+If the database already contains tables, the script asks for confirmation
+before resetting them. Type `RESET` to delete existing records and
+recreate the database with sample data. Any other input cancels the reset.
+
+**Warning:** Resetting the database permanently deletes existing records.
+Do not run a reset when you need to preserve data.
+
+Database initialization is a separate setup step and is not required
+every time the API starts.
+
 ### Run the API
 
     fastapi dev main.py
@@ -43,6 +62,28 @@ The API runs locally at:
 - http://127.0.0.1:8000
 - http://127.0.0.1:8000/docs
 - http://127.0.0.1:8000/health
+
+### Run the client
+
+The client uses Streamlit and needs the API to be running.
+Set `API_KEY` in `.env` before starting the API and client. This key is
+needed to add, edit and delete books.
+
+Open two terminals in the project folder. Activate the virtual environment
+in both:
+
+    source .venv/bin/activate
+
+Start the API in the first terminal:
+
+    fastapi dev main.py
+
+Start the client in the second terminal:
+
+    streamlit run client.py
+
+Open the address shown by Streamlit in your browser. The client connects
+to the API at `http://127.0.0.1:8000`.
 
 ### Run tests
 
@@ -106,4 +147,4 @@ no loan history is removed from the database entirely.
 
 ## ER Diagram
 
-![ER Diagram book-club-library](./docs/er_library_v1.png)
+![ER Diagram book-club-library](./docs/er_diagram_v2.png)
