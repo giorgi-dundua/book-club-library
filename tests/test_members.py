@@ -58,17 +58,17 @@ def client(tmp_path, monkeypatch):
         app.dependency_overrides.pop(get_db, None)
 
 
-def test_get_members(client):
+def test_get_members_personal_data(client):
     response = client.get(
-        '/members',
+        '/members/personal',
     ) 
     assert response.status_code == 200
     assert len(response.json().get('members')) == 2
 
 
-def test_get_member(client):
+def test_get_member_personal_data(client):
     response = client.get(
-        '/members/2',
+        '/members/2/personal',
     ) 
     assert response.status_code == 200
     assert response.json() == {
@@ -77,13 +77,18 @@ def test_get_member(client):
         'email': 'test2@example.com',
         'phone': '555-990099',
         'joined': date.today().isoformat(),
-        'deleted': 0
+        'deleted': 0,
+        'loan_history': {
+            'count': 0,
+            'all_loans': [],
+            'overdue_loans': []
+        }
     }
 
 
-def test_get_non_valid_member(client):
+def test_get_non_valid_member_personal_data(client):
     response = client.get(
-        '/members/900',
+        '/members/900/personal',
     ) 
     assert response.status_code == 404
     assert response.json() == {'detail': 'Member not found'}
