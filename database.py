@@ -161,8 +161,22 @@ def validate_add_book(title: str, author_name: str) -> bool:
 
 
 def validate_add_author(author_name: str) -> bool:
-    command = "SELECT * FROM authors WHERE author_name == ?"
+    command = 'SELECT * FROM authors WHERE author_name == ?'
     return not db_select(command, author_name)
+
+
+def get_books(conn: Connection) -> list:
+    command = (
+        """
+        SELECT b.title, GROUP_CONCAT(a.author_name, ', '), b.published
+        FROM books b
+        JOIN book_author ba ON b.book_id = ba.book_id
+        LEFT JOIN authors a ON ba.author_id = a.author_id
+        GROUP BY b.title
+        ORDER BY b.title ASC
+        """
+    )
+    return db_select(command, conn=conn)
 
 
 def get_book(conn: Connection, book_id: int) -> dict | None:

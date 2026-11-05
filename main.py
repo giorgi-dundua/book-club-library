@@ -3,7 +3,7 @@ from sqlite3 import Error as SQLiteError
 from typing import Annotated
 from datetime import date
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 
 from auth import require_api_key
 from database import (
@@ -673,6 +673,69 @@ def update_member(
     )
 
 
+@app.get("/books", status_code=200)
+def get_books(
+    conn: Annotated[Connection, Depends(get_db)]
+):
+    books = conn.execute(
+        """
+        SELECT b.title, GROUP_CONCAT(a.author_name, ', '), b.published,
+        CASE WHEN l.return_date IS NOT NULL THEN 1
+        ELSE 0
+        END AS available
+        FROM books b
+        JOIN book_author ba ON b.book_id = ba.book_id
+        JOIN loans l ON b.book_id = l.book_id
+        LEFT JOIN authors a ON ba.author_id = a.author_id
+        GROUP BY b.title
+        ORDER BY b.title ASC
+        """,
+    ).fetchall()
+
+    if books is None:
+        raise HTTPException(status_code=404, detail="No books found")
+
+    all_books = []
+
+    for book in books:
+        all_books.append(dict(zip(
+            ("title", "authors", "published", "available"),
+            (book[0], book[1].split(', '), book[2], book[3])
+        )))
+
+    return {'books': all_books}
+
+   
+@app.get("/books/{title}", status_code=200)
+def get_book(
+    search: str, conn: Annotated[Connection, Depends(get_db)]
+):
+    book = conn.execute(
+        """
+        SELECT b.title, GROUP_CONCAT(a.author_name, ', '), b.published,
+        CASE WHEN l.return_date IS NOT NULL THEN 1
+        ELSE 0
+        END AS available
+        FROM books b
+        JOIN book_author ba ON b.book_id = ba.book_id
+        JOIN loans l ON b.book_id = l.book_id
+        LEFT JOIN authors a ON ba.author_id = a.author_id
+        WHERE b.title LIKE ?
+        GROUP BY b.title
+        ORDER BY b.title ASC
+        """,
+        (search,),
+    ).fetchone()
+
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    return dict(
+        zip(
+            ("title", "authors", "published", "available"),
+            (book[0], book[1].split(', '), book[2], book[3])
+        )
+    )
 @app.post("/members", dependencies=[Depends(require_api_key)], status_code=201)
 def create_member(member: MemberCreate, conn: Annotated[Connection, Depends(get_db)]):
     
