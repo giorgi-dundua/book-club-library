@@ -248,7 +248,7 @@ def update_member(
 
 @app.get("/books", status_code=200)
 def get_books(
-    conn: Annotated[Connection, Depends(get_db)], search: str | None = Query(default=None)
+    conn: Annotated[Connection, Depends(get_db)]
 ):
     books = conn.execute(
         """
@@ -256,19 +256,78 @@ def get_books(
         FROM books b
         JOIN book_author ba ON b.book_id = ba.book_id
         LEFT JOIN authors a ON ba.author_id = a.author_id
-        WHERE b.title = ?
         GROUP BY b.title
         ORDER BY b.title ASC
         """,
-        (search,),
-    ).fetchone()
+    ).fetchall()
 
     if books is None:
         raise HTTPException(status_code=404, detail="Book not found")
 
+
+    loans = conn.execute(
+         """
+        SELECT book_id, return_date
+        FROM loans
+        """,
+    ).fetchall()
+
+
+    available = []
+
+    for loan in loans:
+        book_id = loan[0]
+        return_date = loan[1]
+
+        if return_date is None:
+            available[book_id] = 0
+        else:
+            available[book_id] = 1
+
+
     return dict(
         zip(
-            ("title", "authors", "published"),
-            books,
+            ("title", "authors", "published", "available"),
+            (books, available)
+        )
+    )
+
+
+@app.get("/books/{title}", status_code=200)
+def get_book(
+    search: str, conn: Annotated[Connection, Depends(get_db)]
+):
+    books = conn.execute(
+        """
+        SELECT b.title, GROUP_CONCAT(a.author_name, ', '), b.published
+        FROM books b
+        JOIN book_author ba ON b.book_id = ba.book_id
+        LEFT JOIN authors a ON ba.author_id = a.author_id
+        WHERE b.title LIKE ?
+        GROUP BY b.title
+        ORDER BY b.title ASC
+        """,
+        (search,),
+    ).fetchall()
+
+    if books is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    loan = conn.execute(
+             """
+            SELECT return_date FROM loans
+            WHERE WHERE b.title LIKE ? AND return_date IS NULL;
+            """,
+            ).fetchall()
+
+    if loan[0] is None:
+        available = 0
+    else:
+        available = 1
+    
+    return dict(
+        zip(
+            ("title", "authors", "published", "available"),
+            (books, available)
         )
     )
