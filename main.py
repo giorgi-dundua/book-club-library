@@ -466,6 +466,114 @@ def return_loan(
     }
 
 
+@app.get('/members/personal', dependencies=[Depends(require_api_key)])
+def get_members_personal_data(
+    conn: Annotated[Connection, Depends(get_db)]
+):
+    try:
+        members = conn.execute(
+            'SELECT * FROM members WHERE deleted = 0',
+        ).fetchall()
+
+        # No members found
+        if members is None:
+            raise HTTPException(status_code=404, detail='No members found')
+
+        total_members_data = []
+
+        for member in members:
+
+            loan_history = retrive_member_loan_records(member[0], conn)
+            
+            member_data = dict(zip(
+                ('member_id', 'member_name', 'email', 'phone', 
+                'joined', 'deleted', 'loan_history'),
+                (*member, loan_history)
+            ))
+
+            total_members_data.append(member_data)
+
+        conn.commit()
+
+    except IntegrityError:
+        conn.rollback()
+        raise
+
+    return {'members': total_members_data}
+
+
+@app.get('/members/{member_id}/personal', dependencies=[Depends(require_api_key)])
+def get_member_personal_data(
+    member_id: int, conn: Annotated[Connection, Depends(get_db)]
+):
+    try:
+        member = conn.execute(
+            'SELECT * FROM members WHERE '
+            'member_id = ? AND deleted = 0',
+            (member_id,)
+        ).fetchone()
+
+        # Member does not exist or deleted: 1
+        if member is None:
+            raise HTTPException(status_code=404, detail='Member not found')
+
+        loan_history = retrive_member_loan_records(member_id, conn)
+
+        conn.commit()
+
+    except IntegrityError:
+        conn.rollback()
+        raise
+
+    return dict(zip(
+        ('member_id', 'member_name', 'email', 'phone', 'joined', 'deleted', 'loan_history'),
+        (*member, loan_history)
+    ))
+
+
+def retrive_member_loan_records(
+    member_id: int, conn: Annotated[Connection, Depends(get_db)]
+) -> list:
+    try:
+        member_loan_records = conn.execute(
+            '''
+            SELECT b.title, l.loan_date, l.due_date, l.return_date, 
+            l.loan_id, l.member_id, l.book_id 
+            FROM loans l 
+            JOIN books b ON l.book_id = b.book_id 
+            JOIN members m ON l.member_id = m.member_id 
+            WHERE l.member_id = ? 
+            ''',
+            (member_id,)
+        ).fetchall()
+
+        loans, overdue_loans = [], []
+        
+        for loan in member_loan_records:
+            ids = dict(zip(
+                ('loan_id', 'member_id', 'book_id'),
+                loan[-3:]
+            ))
+            data = dict(zip(
+                ('book_title', 'loan_date', 'due_date', 
+                'return_date', 'id_info'),
+                (*loan[:4],ids)
+            ))
+            if data['return_date'] is None and data['due_date'] < date.today().isoformat():
+                overdue_loans.append(data)
+            loans.append(data)
+            
+    except IntegrityError:
+        conn.rollback()
+        raise
+
+    return {
+        'count': len(member_loan_records),
+        'all_loans': loans,
+        'overdue_loans': overdue_loans
+    }
+
+
 @app.delete('/members/{member_id}', dependencies=[Depends(require_api_key)], status_code=204)
 def delete_member(
     member_id: int, conn: Annotated[Connection, Depends(get_db)]
@@ -515,6 +623,8 @@ def delete_member(
     except IntegrityError:
         conn.rollback()
         raise
+
+
 @app.patch("/members/{member_id}", dependencies=[Depends(require_api_key)])
 def update_member(
     member_id: int, changes: MemberUpdate, conn: Annotated[Connection, Depends(get_db)]
