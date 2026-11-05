@@ -48,7 +48,7 @@ class LibraryApiClient:
                     if isinstance(msg, str) and msg.strip():
                         error_msg = msg
             except requests.exceptions.JSONDecodeError:
-                pass  # what to do here?
+                pass
             raise LibraryApiError(error_msg) from error
         except requests.exceptions.RequestException as error:
             raise LibraryApiError("The API request failed") from error
@@ -78,6 +78,11 @@ class LibraryApiClient:
     def get_books(self, search: str | None = None) -> list[dict]:
         params = {"search": search} if search else {}
         return self._request("GET", "/books", params=params)
+
+    def patch_book(self, book_id: int, changes: dict) -> dict:
+        return self._request(
+            "PATCH", f"/books/{book_id}", authenticated=True, json=changes
+        )
 
 
 class LibraryApiError(Exception):
