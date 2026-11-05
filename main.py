@@ -293,6 +293,7 @@ def get_book(
         JOIN book_author ba ON b.book_id = ba.book_id
         JOIN loans l ON b.book_id = l.book_id
         LEFT JOIN authors a ON ba.author_id = a.author_id
+        WHERE b.title LIKE ?
         GROUP BY b.title
         ORDER BY b.title ASC
         """,
