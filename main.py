@@ -466,6 +466,55 @@ def return_loan(
     }
 
 
+@app.delete('/members/{member_id}', dependencies=[Depends(require_api_key)], status_code=204)
+def delete_member(
+    member_id: int, conn: Annotated[Connection, Depends(get_db)]
+):
+    member = conn.execute(
+        'SELECT deleted FROM members WHERE member_id = ?',
+        (member_id,)
+    ).fetchone()
+
+    # Member does not exist or is already deleted/anonomized
+    if member is None or member[0] == 1:
+        raise HTTPException(status_code=404, detail='Member not found')
+
+    loans_record = conn.execute(
+        'SELECT COUNT(*) FROM loans WHERE member_id = ?',
+        (member_id,)
+    ).fetchone()[0]
+
+    try:
+        if loans_record:
+            # Creates psudo-anonomized data derived from current field
+            psudo_anonomized = conn.execute(
+                'SELECT SUBSTR(member_name, 1, 1) || "." as name_initial, '
+                'SUBSTR(email, 1, 1) || "*****" || SUBSTR(email, INSTR(email, "@")) as masked_email, '
+                '"******" || SUBSTR(phone, -2) as masked_phone '
+                'FROM members WHERE member_id = ?',
+                (member_id,)
+            ).fetchone()
+
+            # Hard coded default field placeholders for anonomized member
+            anonomized_data = ('$deleted', '$deleted@x.x', '+11-1111', date(2000,1,1))
+
+            conn.execute(
+                'UPDATE members SET '
+                'member_name = ?, email = ?, phone = ?, deleted = 1, joined = ? '
+                'WHERE member_id = ?',
+                (*anonomized_data, member_id,)
+            )
+        else:
+            conn.execute(
+                'DELETE FROM members WHERE member_id = ?',
+                (member_id,)
+            )
+
+        conn.commit()
+
+    except IntegrityError:
+        conn.rollback()
+        raise
 @app.patch("/members/{member_id}", dependencies=[Depends(require_api_key)])
 def update_member(
     member_id: int, changes: MemberUpdate, conn: Annotated[Connection, Depends(get_db)]
