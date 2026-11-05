@@ -92,7 +92,7 @@ with tab_manage, st.form("add_book"):
 
 with tab_manage, st.form("edit_book"):
     st.subheader("Edit book")
-    st.caption("Leave fields blank to keep their current values.")
+    st.caption("Leave fields blank to keep their current values")
     book_id = st.number_input("Book ID", min_value=1, step=1)
     title = st.text_input("Title").strip()
     authors = [
@@ -135,6 +135,55 @@ with tab_manage, st.form("edit_book"):
                 st.success(f"Book {result['book_id']} updated successfully")
             except LibraryApiError as error:
                 st.error(str(error))
+
+with tab_manage, st.form("delete_book"):
+    if "delete_candidate" not in st.session_state:
+        st.session_state["delete_candidate"] = None
+    st.subheader("Delete book")
+    message = st.session_state.pop("delete_success", None)
+    if message is not None:
+        st.success(message)
+    st.caption("Enter a book ID and find the book first")
+    book_id = st.number_input("Book ID", min_value=1, value=None, step=1)
+    if st.form_submit_button("Find book"):
+        st.session_state["delete_confirmed"] = False
+        if not book_id:
+            st.warning("Enter a book ID")
+        else:
+            try:
+                result = api.get_book(book_id)
+                st.session_state["delete_candidate"] = result
+            except LibraryApiError as error:
+                st.error(str(error))
+                st.session_state["delete_candidate"] = None
+    candidate = st.session_state["delete_candidate"]
+    if candidate is not None:
+        st.dataframe([candidate], hide_index=True)
+        confirmed_delete = st.checkbox(
+            "I confirm that I want to delete the book", key="delete_confirmed"
+        )
+
+    if st.form_submit_button("Delete book"):
+        if not candidate:
+            st.warning("Find the book first")
+        else:
+            if candidate["book_id"] != book_id:
+                st.warning("The ID changed. Find the book again")
+            else:
+                if confirmed_delete:
+                    try:
+                        api.delete_book(candidate["book_id"])
+                        st.session_state["delete_success"] = (
+                            f"Book with ID {book_id} deleted"
+                        )
+
+                        st.session_state["delete_candidate"] = None
+                        st.rerun()
+                    except LibraryApiError as error:
+                        st.error(str(error))
+                else:
+                    st.warning("Please check the confirmation box to enable deletion")
+
 
 with tab_loans:
     st.info("Borrow and return forms will be added here.")

@@ -1,4 +1,5 @@
 import os
+from typing import Any
 
 import requests
 from dotenv import load_dotenv
@@ -13,7 +14,7 @@ class LibraryApiClient:
 
     def _request(
         self, method: str, path: str, *, authenticated: bool = False, **kwargs
-    ):
+    ) -> Any:
         headers = kwargs.pop("headers", {})
         timeout = kwargs.pop("timeout", 5)
 
@@ -32,6 +33,8 @@ class LibraryApiClient:
             )
 
             response.raise_for_status()
+            if response.status_code == 204:
+                return None
             return response.json()
         except requests.exceptions.Timeout as error:
             raise LibraryApiError("The request took too long") from error
@@ -40,9 +43,12 @@ class LibraryApiClient:
         except requests.exceptions.JSONDecodeError as error:
             raise LibraryApiError("The response was not valid JSON") from error
         except requests.exceptions.HTTPError as error:
-            error_msg = f"API returned HTTP {error.response.status_code}"
+            error_response = error.response
+            if error_response is None:
+                raise LibraryApiError(f"HTTP error occurred: {error}") from error
+            error_msg = f"API returned HTTP {error_response.status_code}"
             try:
-                json_msg = error.response.json()
+                json_msg = error_response.json()
                 if isinstance(json_msg, dict):
                     msg = json_msg.get("detail")
                     if isinstance(msg, str) and msg.strip():
@@ -83,6 +89,9 @@ class LibraryApiClient:
         return self._request(
             "PATCH", f"/books/{book_id}", authenticated=True, json=changes
         )
+
+    def delete_book(self, book_id: int) -> None:
+        return self._request("DELETE", f"/books/{book_id}", authenticated=True)
 
 
 class LibraryApiError(Exception):
