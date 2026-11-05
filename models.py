@@ -57,7 +57,7 @@ class MemberUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     member_name: str | None = Field(min_length=2, max_length=100, default=None)
-    email: str | None = Field(max_length=100, default=None)
+    email: EmailStr | None = Field(max_length=100, default=None)
     phone: str | None = Field(
         pattern=r"^[\+0-9][0-9\-\(\)\.\ ]{6,25}$",
         min_length=6,
@@ -70,9 +70,9 @@ class MemberCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     member_name: str = Field(min_length=2, max_length=100)
-    email: str = Field(max_length=100)
+    email: EmailStr = Field(max_length=100)
     phone: str = Field(
         pattern=r"^[\+0-9][0-9\-\(\)\.\ ]{6,25}$",
-        in_length=6,
+        min_length=6,
         max_length=25
         )
