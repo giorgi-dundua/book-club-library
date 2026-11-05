@@ -140,4 +140,16 @@ class MemberUpdate(BaseModel):
         min_length=6,
         max_length=25,
         default=None,
-    )
+        )
+
+
+class MemberCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    member_name: str = Field(min_length=2, max_length=100)
+    email: EmailStr = Field(max_length=100)
+    phone: str = Field(
+        pattern=r"^[\+0-9][0-9\-\(\)\.\ ]{6,25}$",
+        min_length=6,
+        max_length=25
+        )
