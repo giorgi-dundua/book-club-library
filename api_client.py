@@ -34,16 +34,24 @@ class LibraryApiClient:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.Timeout as error:
-            raise LibraryApiError("The request took too long.") from error
+            raise LibraryApiError("The request took too long") from error
         except requests.exceptions.ConnectionError as error:
             raise LibraryApiError("Could not connect to the server") from error
         except requests.exceptions.JSONDecodeError as error:
             raise LibraryApiError("The response was not valid JSON") from error
         except requests.exceptions.HTTPError as error:
-            status = error.response.status_code
-            raise LibraryApiError(f"API returned HTTP {status}") from error
+            error_msg = f"API returned HTTP {error.response.status_code}"
+            try:
+                json_msg = error.response.json()
+                if isinstance(json_msg, dict):
+                    msg = json_msg.get("detail")
+                    if isinstance(msg, str) and msg.strip():
+                        error_msg = msg
+            except requests.exceptions.JSONDecodeError:
+                pass  # what to do here?
+            raise LibraryApiError(error_msg) from error
         except requests.exceptions.RequestException as error:
-            raise LibraryApiError("The API request failed.") from error
+            raise LibraryApiError("The API request failed") from error
 
     def check_health(self) -> dict:
         return self._request("GET", "/health")
@@ -63,6 +71,13 @@ class LibraryApiClient:
 
     def get_never_borrowed_books(self) -> list[dict]:
         return self._request("GET", "/books/never-borrowed")
+
+    def get_book(self, book_id: int) -> dict:
+        return self._request("GET", f"/books/{book_id}")
+
+    def get_books(self, search: str | None = None) -> list[dict]:
+        params = {"search": search} if search else {}
+        return self._request("GET", "/books", params=params)
 
 
 class LibraryApiError(Exception):

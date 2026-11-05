@@ -26,6 +26,29 @@ with tab_books:
     matches = [book for book in books if search.lower() in book["Title"].lower()]
     st.dataframe(matches, hide_index=True)
 
+    with st.form("browse_books"):
+        search = st.text_input("Search by title (optional)").strip()
+        if st.form_submit_button("Show books"):
+            try:
+                result = api.get_books(search)
+                if result:
+                    st.dataframe(result, hide_index=True)
+                else:
+                    st.info("No books found")
+            except LibraryApiError as error:
+                st.error(str(error))
+
+    with st.form("find_book"):
+        book_id = st.number_input("Book ID", min_value=1, step=1)
+        if st.form_submit_button("Find book"):
+            try:
+                result = api.get_book(book_id)
+                if result:
+                    st.dataframe([result], hide_index=True)
+            except LibraryApiError as error:
+                st.error(str(error))
+
+
 with tab_manage, st.form("add_book"):
     title = st.text_input("Title").strip()
     author = st.text_input("Author").strip()
