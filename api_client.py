@@ -93,6 +93,14 @@ class LibraryApiClient:
     def delete_book(self, book_id: int) -> None:
         return self._request("DELETE", f"/books/{book_id}", authenticated=True)
 
+    def get_members_personal_data(self) -> dict:
+        return self._request("GET", "/members/personal", authenticated=True)
+
+    def get_member_personal_data(self, member_id: int) -> dict:
+        return self._request(
+            "GET", f"/members/{member_id}/personal", authenticated=True
+        )
+
 
 class LibraryApiError(Exception):
     pass

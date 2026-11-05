@@ -9,11 +9,23 @@ st.set_page_config(page_title="Book Club Library", layout="wide")
 
 st.title("Book Club Library")
 
-tab_health, tab_books, tab_manage, tab_loans, tab_stats = st.tabs(
-    ["Health", "Books", "Manage books", "Loans", "Statistics"]
+tab_health, tab_books, tab_manage, tab_members, tab_loans, tab_stats = st.tabs(
+    ["Health", "Books", "Manage books", "Members", "Loans", "Statistics"]
 )
 
 api = LibraryApiClient("http://127.0.0.1:8000")
+
+with tab_health:
+    try:
+        result = api.check_health()
+
+        if result == {"status": "ok"}:
+            st.success("API connected")
+        else:
+            st.error("Unexpected API response")
+
+    except LibraryApiError as error:
+        st.error(str(error))
 
 with tab_books:
     with st.form("browse_books"):
@@ -174,6 +186,31 @@ with tab_manage, st.form("delete_book"):
                 else:
                     st.warning("Please check the confirmation box to enable deletion")
 
+with tab_members:
+    st.info("Library Member Information")
+    if st.button("Show members"):
+        try:
+            result = api.get_members_personal_data()
+            if result["members"]:
+                st.dataframe(result["members"], hide_index=True)
+            else:
+                st.info("No members found")
+
+        except LibraryApiError as error:
+            st.error(str(error))
+
+    with st.form("find_member"):
+        st.info("Find Member by ID")
+        member_id = st.number_input("Member ID", min_value=1, value=None, step=1)
+        if st.form_submit_button("Find member"):
+            if member_id is None:
+                st.warning("Enter a member ID")
+            else:
+                try:
+                    result = api.get_member_personal_data(member_id)
+                    st.dataframe([result], hide_index=True)
+                except LibraryApiError as error:
+                    st.error(str(error))
 
 with tab_loans:
     st.info("Borrow and return forms will be added here.")
@@ -200,16 +237,3 @@ with tab_stats:
 
         except LibraryApiError as error:
             st.error(str(error))
-
-
-with tab_health:
-    try:
-        result = api.check_health()
-
-        if result == {"status": "ok"}:
-            st.success("API connected")
-        else:
-            st.error("Unexpected API response")
-
-    except LibraryApiError as error:
-        st.error(str(error))
