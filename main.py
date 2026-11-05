@@ -1,13 +1,25 @@
 from sqlite3 import Connection, IntegrityError
 from sqlite3 import Error as SQLiteError
 from typing import Annotated
+from datetime import date
 
 from fastapi import Depends, FastAPI, HTTPException
 
 from auth import require_api_key
-from database import db_connect
-from models import BookCreate, LoanCreate, LoanReturn, MemberUpdate
-import datetime
+from database import (
+    db_connect,
+    get_book,
+    get_book_loan_statistics,
+    get_never_borrowed_books,
+)
+from models import (
+    BookCreate,
+    BookPatch,
+    BookUpdate,
+    LoanCreate,
+    LoanReturn,
+    MemberUpdate,
+)
 
 app = FastAPI(title="Book Club Library API")
 
@@ -23,6 +35,13 @@ def get_db():
         yield conn
     finally:
         conn.close()
+
+
+@app.get("/books/never-borrowed")
+def read_never_borrowed_books(conn: Annotated[Connection, Depends(get_db)]):
+    book_rows = get_never_borrowed_books(conn)
+    keys = ["book_id", "title"]
+    return [dict(zip(keys, row)) for row in book_rows]
 
 
 def insert_book(conn: Connection, book: BookCreate) -> dict:
@@ -74,6 +93,197 @@ def insert_book(conn: Connection, book: BookCreate) -> dict:
     }
 
 
+def save_book_update(
+    book_id: int,
+    title: str,
+    authors: list[str],
+    published_year: int | None,
+    conn: Connection,
+) -> dict:
+    """Save complete book information in SQLite."""
+
+    existing_book = conn.execute(
+        "SELECT book_id FROM books WHERE book_id = ?",
+        (book_id,),
+    ).fetchone()
+
+    if existing_book is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Book not found",
+        )
+
+    published = f"{published_year}-01-01" if published_year is not None else None
+
+    try:
+        # Update the main book information.
+        conn.execute(
+            """
+            UPDATE books
+            SET title = ?, published = ?
+            WHERE book_id = ?
+            """,
+            (title, published, book_id),
+        )
+
+        # Remove the old author relationships.
+        conn.execute(
+            "DELETE FROM book_author WHERE book_id = ?",
+            (book_id,),
+        )
+
+        # Connect the book to its corrected authors.
+        for author_name in authors:
+            author = conn.execute(
+                """
+                SELECT author_id
+                FROM authors
+                WHERE LOWER(author_name) = LOWER(?)
+                LIMIT 1
+                """,
+                (author_name,),
+            ).fetchone()
+
+            if author is None:
+                cursor = conn.execute(
+                    "INSERT INTO authors (author_name) VALUES (?)",
+                    (author_name,),
+                )
+                author_id = cursor.lastrowid
+            else:
+                author_id = author[0]
+
+            conn.execute(
+                """
+                INSERT INTO book_author (book_id, author_id)
+                VALUES (?, ?)
+                """,
+                (book_id, author_id),
+            )
+
+        # Save all changes together.
+        conn.commit()
+
+    except IntegrityError as error:
+        conn.rollback()
+        print("DATABASE ERROR:", repr(error))
+
+        raise HTTPException(
+            status_code=409,
+            detail="Book update conflicts with database constraints",
+        ) from error
+
+    except SQLiteError as error:
+        conn.rollback()
+        print("DATABASE ERROR:", repr(error))
+
+        raise HTTPException(
+            status_code=500,
+            detail="Internal database error",
+        ) from error
+
+    return {
+        "book_id": book_id,
+        "title": title,
+        "authors": authors,
+        "published": published,
+    }
+
+
+@app.put("/books/{book_id}", dependencies=[Depends(require_api_key)])
+def replace_book(
+    book_id: int,
+    data: BookUpdate,
+    conn: Annotated[Connection, Depends(get_db)],
+):
+    return save_book_update(
+        book_id=book_id,
+        title=data.title,
+        authors=data.authors,
+        published_year=data.published_year,
+        conn=conn,
+    )
+
+
+@app.patch("/books/{book_id}", dependencies=[Depends(require_api_key)])
+def patch_book(
+    book_id: int,
+    data: BookPatch,
+    conn: Annotated[Connection, Depends(get_db)],
+):
+    # Find the current book.
+    current_book = conn.execute(
+        """
+        SELECT title, published
+        FROM books
+        WHERE book_id = ?
+        """,
+        (book_id,),
+    ).fetchone()
+
+    if current_book is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Book not found",
+        )
+
+    # Find the current authors.
+    current_authors = conn.execute(
+        """
+        SELECT a.author_name
+        FROM authors a
+        JOIN book_author ba ON a.author_id = ba.author_id
+        WHERE ba.book_id = ?
+        ORDER BY a.author_id
+        """,
+        (book_id,),
+    ).fetchall()
+
+    authors = [row[0] for row in current_authors]
+
+    # Get only the fields supplied by the volunteer.
+    changes = data.model_dump(exclude_unset=True)
+
+    if not changes:
+        raise HTTPException(
+            status_code=422,
+            detail="At least one field must be provided",
+        )
+
+    if "title" in changes and changes["title"] is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Title cannot be null",
+        )
+
+    if "authors" in changes and changes["authors"] is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Authors cannot be null",
+        )
+
+    # Keep existing values for fields not supplied.
+    title = changes.get("title", current_book[0])
+
+    published_year = int(current_book[1][:4]) if current_book[1] is not None else None
+
+    published_year = changes.get(
+        "published_year",
+        published_year,
+    )
+
+    authors = changes.get("authors", authors)
+
+    # Save the complete updated information.
+    return save_book_update(
+        book_id=book_id,
+        title=title,
+        authors=authors,
+        published_year=published_year,
+        conn=conn,
+    )
+
+
 @app.post("/books", dependencies=[Depends(require_api_key)], status_code=201)
 def create_books(
     data: BookCreate | list[BookCreate],
@@ -120,6 +330,62 @@ def create_books(
             status_code=500,
             detail="Internal database error",
         ) from error
+
+        
+@app.get("/books/{book_id}")
+def read_book(
+    book_id: int,
+    conn: Annotated[Connection, Depends(get_db)],
+) -> dict:
+    """Show one book with its authors."""
+    book = get_book(conn, book_id)
+
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    return book
+
+
+@app.get('/loans', dependencies=[Depends(require_api_key)])
+def get_loans(conn: Annotated[Connection, Depends(get_db)]):
+    active_loans = conn.execute(
+        '''
+        SELECT b.title, m.member_name, l.due_date, 
+        l.loan_id, l.member_id, l.book_id 
+        FROM loans l
+        JOIN books b ON l.book_id = b.book_id
+        JOIN members m ON l.member_id = m.member_id
+        WHERE l.return_date IS NULL
+        '''
+    ).fetchall()
+
+    if not active_loans:
+        raise HTTPException(status_code=404, detail="No loans found")
+
+    count = len(active_loans)
+    loans = []
+    overdue_loans = []
+
+    for loan in active_loans:
+        ids = dict(zip(
+            ('loan_id', 'member_id', 'book_id'),
+            loan[-3:]
+        ))
+        data = dict(zip(
+            ('book', 'member', 'due_date', 'id_info'),
+            (*loan[:3],ids)
+        ))
+        if data.get('due_date') < date.today().isoformat():
+            overdue_loans.append(data)
+        loans.append(data)
+
+    overdue_loans.sort(key=lambda x: x.get('due_date'))
+
+    return {
+        'count': count,
+        'active_loans': loans, 
+        'overdue_loans': overdue_loans
+    }
 
 
 @app.post("/loans", dependencies=[Depends(require_api_key)], status_code=201)
@@ -287,3 +553,54 @@ def delete_book(
     except IntegrityError:
         conn.rollback()
         raise
+        
+        
+@app.get('/members/{member_id}/loans', dependencies=[Depends(require_api_key)])
+def get_member_loans(member_id: int, conn: Annotated[Connection, Depends(get_db)]):
+    active_loans = conn.execute(
+        '''
+        SELECT b.title, m.member_name, l.due_date, 
+        l.loan_id, l.member_id, l.book_id 
+        FROM loans l
+        JOIN books b ON l.book_id = b.book_id
+        JOIN members m ON l.member_id = m.member_id
+        WHERE l.return_date IS NULL 
+        AND l.member_id = ?
+        ''',
+        (member_id,)
+    ).fetchall()
+
+    if not active_loans:
+        raise HTTPException(status_code=404, detail="No loans found")
+
+    count = len(active_loans)
+    loans = []
+    overdue_loans = []
+
+    for loan in active_loans:
+        ids = dict(zip(
+            ('loan_id', 'member_id', 'book_id'),
+            loan[-3:]
+        ))
+        data = dict(zip(
+            ('book', 'member', 'due_date', 'id_info'),
+            (*loan[:3],ids)
+        ))
+        if data.get('due_date') < date.today().isoformat():
+            overdue_loans.append(data)
+        loans.append(data)
+
+    overdue_loans.sort(key=lambda x: x.get('due_date'))
+
+    return {
+        'member_id': member_id,
+        'count': count,
+        'active_loans': loans, 
+        'overdue_loans': overdue_loans}
+  
+  
+@app.get("/statistics/most-borrowed")
+def read_book_loan_statistics(conn: Annotated[Connection, Depends(get_db)]):
+    book_rows = get_book_loan_statistics(conn)
+    keys = ["book_id", "title", "total_loans"]
+    return [dict(zip(keys, row)) for row in book_rows]
