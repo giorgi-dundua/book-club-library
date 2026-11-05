@@ -120,7 +120,11 @@ loans = [
     (4, 1, date(2026, 9, 1), date(2026, 9, 1) + delta, None),
     (5, 2, date(2026, 10, 1), date(2026, 10, 1) + delta, None),
     (6, 3, date(2026, 10, 10), date(2026, 10, 10) + delta, None),
-    (10, 21, date(2026, 10, 10), date(2026, 10, 10) + delta, None),
+    (10, 21, date.today(), date.today() + delta, None),
+    (8, 10, date.today(), date.today() + delta, None),
+    (8, 11, date.today(), date.today() + delta, None),
+    (7, 5, date.today(), date.today() + delta, None),
+    (9, 6, date.today(), date.today() + delta, None),
 ]
 
 
