@@ -431,3 +431,79 @@ def test_borrow_after_return(client, tmp_path):
 
     assert total_loans == 2
     assert active_loans == 1
+
+
+def test_get_active_loans_empty_db(client):
+    response = client.get(
+        '/loans'
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {'detail': 'No loans found'}
+
+
+def test_get_active_loans(client,tmp_path):
+    db_path = tmp_path / 'test_bookclub.db'
+
+    # Create a loan test data
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            '''
+            INSERT INTO loans
+            (member_id, book_id, loan_date, due_date)
+            VALUES (?, ?, ?, ?)
+            ''',
+            (1, 4, '2026-10-10', '2026-10-24',),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = client.get(
+        '/loans'
+    )
+
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data.get('count') == 1
+    assert len(data.get('active_loans')) == 1
+    assert len(data.get('overdue_loans')) == 1
+    assert data.get('active_loans')[0].get('id_info') == {
+        'loan_id': 1, 'member_id': 1, 'book_id': 4
+    }
+
+
+def test_get_member_loans(client,tmp_path):
+    db_path = tmp_path / 'test_bookclub.db'
+
+    # Create a loan test data
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            '''
+            INSERT INTO loans
+            (member_id, book_id, loan_date, due_date)
+            VALUES (?, ?, ?, ?)
+            ''',
+            (1, 4, '2026-10-10', date.today().isoformat(),),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = client.get(
+        '/members/1/loans'
+    )
+
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data.get('member_id') == 1
+    assert data.get('count') == 1
+    assert len(data.get('active_loans')) == 1
+    assert len(data.get('overdue_loans')) == 0
+    assert data.get('active_loans')[0].get('id_info') == {
+        'loan_id': 1, 'member_id': 1, 'book_id': 4
+    }
