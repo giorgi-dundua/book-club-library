@@ -707,7 +707,7 @@ def get_books(
 
    
 @app.get("/books/{title}", status_code=200)
-def get_book(
+def search_book(
     search: str, conn: Annotated[Connection, Depends(get_db)]
 ):
     book = conn.execute(
